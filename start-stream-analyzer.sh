@@ -7,6 +7,8 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
+source venv-gpu/Scripts/activate
+
 set -a
 source .env
 set +a
