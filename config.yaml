@@ -17,10 +17,10 @@ detection:
   # The dog threshold is deliberately very low so that distant dogs are still detected;
   # the price is more false positives (see dog_inside_person_max_conf below).
   conf_person: 0.2
-  conf_dog: 0.02
+  conf_dog: 0.005
   # False-positive filter: a dog whose centre lies inside a person box AND whose confidence is
   # below this value is dropped. This catches the common mistake of a hood/bag detected as a dog.
-  dog_inside_person_max_conf: 0.15
+  dog_inside_person_max_conf: 0.02
 
 pairs:
   # A person and a dog count as "together" when the distance between their box centres, divided
