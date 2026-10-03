@@ -1,5 +1,6 @@
 """Code shared by stream-analyzer.py and video-analyzer.py: startup, per-frame processing, display."""
 import argparse
+import os
 import time
 
 import cv2
@@ -27,7 +28,7 @@ def setup(description, source_help, log_file):
 
     cfg = load_config(args.config)
     log = cfg["logging"]
-    logger = setup_logging(log_file, log["max_bytes"], log["backup_count"])
+    logger = setup_logging(os.path.join(log["dir"], log_file), log["max_bytes"], log["backup_count"])
     return args, cfg, logger
 
 

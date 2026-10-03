@@ -44,6 +44,8 @@ screenshots:
   max_width: 1920
 
 logging:
+  # Directory for log files (created automatically): stream-analyzer.log and video-analyzer.log.
+  dir: logs
   # Each log file is rotated when it reaches this size in bytes (30 MB).
   max_bytes: 31457280
   # Number of rotated backups to keep (<log>.1, <log>.2, ...) in addition to the current file.

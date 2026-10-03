@@ -10,7 +10,8 @@ def test_setup_logging_uses_rotating_file_handler(tmp_path, monkeypatch):
     monkeypatch.setattr(root, "handlers", [])
     monkeypatch.setattr(root, "level", root.level)
 
-    logger = setup_logging(str(tmp_path / "t.log"), max_bytes=1000, backup_count=2)
+    logger = setup_logging(str(tmp_path / "sub" / "t.log"), max_bytes=1000, backup_count=2)
+    assert (tmp_path / "sub").is_dir()
 
     file_handlers = [h for h in logger.handlers if isinstance(h, RotatingFileHandler)]
     assert len(file_handlers) == 1

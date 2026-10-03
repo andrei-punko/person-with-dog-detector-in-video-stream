@@ -1,11 +1,13 @@
 """Logging setup and logging helpers."""
 import logging
+import os
 import sys
 from logging.handlers import RotatingFileHandler
 
 
 def setup_logging(log_file, max_bytes, backup_count):
     """Configure logging to write to a rotating file and the console with a shared format."""
+    os.makedirs(os.path.dirname(os.path.abspath(log_file)), exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format='[%(asctime)s] %(message)s',

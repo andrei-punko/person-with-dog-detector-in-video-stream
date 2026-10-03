@@ -49,4 +49,5 @@ models/*.engine
 Thumbs.db
 
 # Runtime
+logs/
 *.log
