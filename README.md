@@ -76,6 +76,12 @@ python stream-analyzer.py rtsp://user:password@192.168.1.80:554/stream1
 
 The script reconnects automatically if the stream drops. Press **Q** in the video window to stop.
 
+Use `--no-display` to run without a video window (e.g. on a headless server):
+
+```bash
+python stream-analyzer.py --no-display rtsp://user:password@192.168.1.80:554/stream1
+```
+
 ### Analyse a video file
 
 ```bash
@@ -84,6 +90,9 @@ start-video-analyzer.bat videos\01.mp4
 
 # Or directly:
 python video-analyzer.py videos/01.mp4
+
+# Without a video window:
+python video-analyzer.py --no-display videos/01.mp4
 ```
 
 Analysis stops after `MAX_DURATION_SEC` seconds (default: 3 minutes) or when the file ends.

@@ -1,7 +1,7 @@
 from ultralytics import YOLO
+import argparse
 import cv2
 import math
-import sys
 import time
 import numpy as np
 from common import ScreenshotSaver, redact_url, setup_logging, source_label
@@ -90,11 +90,13 @@ def connect(url, url_safe):
 
 # --- Entry point ---
 
-if len(sys.argv) < 2:
-    print("Usage: python stream-analyzer.py <stream_url>")
-    sys.exit(1)
+parser = argparse.ArgumentParser(description="Detect persons and dogs in an RTSP stream.")
+parser.add_argument("stream_url", help="RTSP or other stream URL")
+parser.add_argument("--no-display", action="store_true", help="Disable the video window (for headless servers)")
+args = parser.parse_args()
 
-STREAM_URL = sys.argv[1]
+STREAM_URL = args.stream_url
+NO_DISPLAY = args.no_display
 STREAM_URL_SAFE = redact_url(STREAM_URL)
 screenshots = ScreenshotSaver(SCREENSHOTS_DIR, source_label(STREAM_URL))
 logger.info(f"Stream source: {STREAM_URL_SAFE}")
@@ -200,15 +202,15 @@ while True:
                 timestamp = f"{time.strftime('%Y%m%d_%H%M%S', time.localtime(time_sec))}_{int(time_sec * 1000) % 1000:03d}"
                 screenshots.save(frame, time_sec, timestamp, logger)
 
-    # --- Display (scale down to fit a 1080p monitor if needed) ---
-    h, w = frame.shape[:2]
-    scale = min(1920 / w, 1080 / h, 1.0)
-    display_frame = cv2.resize(frame, (int(w * scale), int(h * scale))) if scale < 1.0 else frame
-    cv2.imshow("Stream", display_frame)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        logger.info("Analysis stopped by user.")
-        break
+    if not NO_DISPLAY:
+        # Scale down to fit a 1080p monitor if needed
+        h, w = frame.shape[:2]
+        scale = min(1920 / w, 1080 / h, 1.0)
+        display_frame = cv2.resize(frame, (int(w * scale), int(h * scale))) if scale < 1.0 else frame
+        cv2.imshow("Stream", display_frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            logger.info("Analysis stopped by user.")
+            break
 
 if cap is not None:
     cap.release()

@@ -1,8 +1,8 @@
 from ultralytics import YOLO
+import argparse
 import cv2
 import math
 import os
-import sys
 import numpy as np
 from common import ScreenshotSaver, redact_url, setup_logging, source_label
 
@@ -42,11 +42,13 @@ def draw_bounding_box(frame, x1, y1, x2, y2, cls, conf):
 
 # --- Entry point ---
 
-if len(sys.argv) < 2:
-    print("Usage: python video-analyzer.py <video_file>")
-    sys.exit(1)
+parser = argparse.ArgumentParser(description="Detect persons and dogs in a video file.")
+parser.add_argument("video_file", help="Path to the video file")
+parser.add_argument("--no-display", action="store_true", help="Disable the video window (for headless servers)")
+args = parser.parse_args()
 
-VIDEO_FILE = sys.argv[1]
+VIDEO_FILE = args.video_file
+NO_DISPLAY = args.no_display
 logger.info(f"Analyzing file: {redact_url(VIDEO_FILE)}")
 
 cap = cv2.VideoCapture(VIDEO_FILE)
@@ -122,15 +124,15 @@ for frame_idx, result in enumerate(results):
                 logger.info(f"Person with dog: person#{i} <-> dog#{j}, distance={distance:.0f}px, time={time_sec:.1f}s")
                 screenshots.save(frame, time_sec, f"{time_sec:.1f}s", logger)
 
-    # --- Display (scale down to fit a 1080p monitor if needed) ---
-    h, w = frame.shape[:2]
-    scale = min(1920 / w, 1080 / h, 1.0)
-    display_frame = cv2.resize(frame, (int(w * scale), int(h * scale))) if scale < 1.0 else frame
-    cv2.imshow("Video Analysis", display_frame)
-
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        logger.info("Analysis interrupted by user.")
-        break
+    if not NO_DISPLAY:
+        # Scale down to fit a 1080p monitor if needed
+        h, w = frame.shape[:2]
+        scale = min(1920 / w, 1080 / h, 1.0)
+        display_frame = cv2.resize(frame, (int(w * scale), int(h * scale))) if scale < 1.0 else frame
+        cv2.imshow("Video Analysis", display_frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            logger.info("Analysis interrupted by user.")
+            break
 
 cv2.destroyAllWindows()
 logger.info("Analysis finished.")
