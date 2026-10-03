@@ -47,3 +47,6 @@ models/*.engine
 # OS
 .DS_Store
 Thumbs.db
+
+# Runtime
+*.log

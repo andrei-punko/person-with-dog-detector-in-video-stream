@@ -4,6 +4,19 @@ import math
 import os
 import sys
 import time
+import logging
+
+# Logging setup
+LOG_FILE = "stream-analyzer.log"
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding='utf-8')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Load pretrained YOLO model (knows classes: 0=person, 16=dog)
 model = YOLO("models/yolo26l.pt")
@@ -28,12 +41,12 @@ STREAM_URL = sys.argv[1]
 if STREAM_URL.isdigit():
     STREAM_URL = int(STREAM_URL)
 
-print(f"Stream source: {STREAM_URL}")
+logger.info(f"Stream source: {STREAM_URL}")
 
 # Connect to stream
 cap = cv2.VideoCapture(STREAM_URL)
 if not cap.isOpened():
-    print(f"Error: could not connect to stream {STREAM_URL}")
+    logger.error(f"Could not connect to stream {STREAM_URL}")
     sys.exit(1)
 
 # Get stream parameters
@@ -47,22 +60,22 @@ if VIDEO_WIDTH <= 0 or VIDEO_HEIGHT <= 0:
     VIDEO_WIDTH = 1920
     VIDEO_HEIGHT = 1080
 
-print(f"FPS: {fps}, Resolution: {VIDEO_WIDTH}x{VIDEO_HEIGHT}")
+logger.info(f"FPS: {fps}, Resolution: {VIDEO_WIDTH}x{VIDEO_HEIGHT}")
 
 # Process ~10 frames per second regardless of stream FPS
 frame_skip = max(1, int(fps / 10))
-print(f"Frame skip: every {frame_skip} frames (~10 fps)")
+logger.info(f"Frame skip: every {frame_skip} frames (~10 fps)")
 
 # Input frame size for the model (max 1920, multiple of 32)
 IMGSZ = min(VIDEO_WIDTH, VIDEO_HEIGHT, 1920)
 IMGSZ = (IMGSZ // 32) * 32
 
-print(f"IMGSZ: {IMGSZ}")
+logger.info(f"IMGSZ: {IMGSZ}")
 
 # Create screenshots folder
 os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
-print(f"Screenshots will be saved to: {SCREENSHOTS_DIR}/")
-print("Analysis started. Stop with Ctrl+C")
+logger.info(f"Screenshots will be saved to: {SCREENSHOTS_DIR}/")
+logger.info("Analysis started. Stop with Ctrl+C")
 
 last_screenshot_time = -1.0
 frame_idx = 0
@@ -70,7 +83,7 @@ frame_idx = 0
 while True:
     ret, frame = cap.read()
     if not ret:
-        print("Stream ended or frame read error.")
+        logger.info("Stream ended or frame read error.")
         break
 
     if frame_idx % frame_skip != 0:
@@ -94,7 +107,7 @@ while True:
     result = results[0]
     num_boxes = len(result.boxes)
     timestamp = time.strftime('%H:%M:%S', time.localtime(time_sec))
-    print(f"[{timestamp}] Frame {frame_idx}: {num_boxes} objects detected")
+    logger.info(f"Frame {frame_idx}: {num_boxes} objects detected")
 
     # 1. Get coordinates of all persons and dogs in the frame
     boxes = result.boxes
@@ -122,7 +135,7 @@ while True:
             # 3. If distance is less than N pixels -> log "Person with dog"
             if distance_real < DISTANCE_THRESHOLD:
                 timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time_sec))
-                print(f"[{timestamp}] Person with dog: person#{i} <-> dog#{j}, distance = {distance_real:.0f}px")
+                logger.info(f"Person with dog: person#{i} <-> dog#{j}, distance = {distance_real:.0f}px")
 
                 # Save screenshot (no more than once per second)
                 if time_sec - last_screenshot_time >= 1.0:
@@ -130,7 +143,7 @@ while True:
                     screenshot_path = os.path.join(SCREENSHOTS_DIR, f"{stream_name}_{time.strftime('%Y%m%d_%H%M%S', time.localtime(time_sec))}.jpg")
                     cv2.imwrite(screenshot_path, frame)
                     last_screenshot_time = time_sec
-                    print(f"  Screenshot saved: {screenshot_path}")
+                    logger.info(f"  Screenshot saved: {screenshot_path}")
 
     # Draw bounding boxes on the frame
     for box in boxes:
