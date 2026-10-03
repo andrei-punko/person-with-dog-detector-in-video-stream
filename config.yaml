@@ -1,0 +1,66 @@
+# Settings shared by stream-analyzer.py and video-analyzer.py.
+#
+# Edit this file to change the defaults, or pass --config my.yaml to a script: only the keys
+# present in that file override the values below, the rest keep their defaults.
+
+model:
+  # TensorRT engine used for inference (generate it with utils/convert-model-to-engine.py).
+  path: models/yolo26l.engine
+  # Model input size in pixels. MUST match the size the engine was exported with
+  # (utils/convert-model-to-engine.py reads this same value).
+  imgsz: 1280
+  # Inference device. "cuda:0" is the first NVIDIA GPU; TensorRT engines need a GPU.
+  device: cuda:0
+
+detection:
+  # Minimum confidence to accept a detection, per class. Detections below it are ignored.
+  # The dog threshold is deliberately very low so that distant dogs are still detected;
+  # the price is more false positives (see dog_inside_person_max_conf below).
+  conf_person: 0.2
+  conf_dog: 0.02
+  # False-positive filter: a dog whose centre lies inside a person box AND whose confidence is
+  # below this value is dropped. This catches the common mistake of a hood/bag detected as a dog.
+  dog_inside_person_max_conf: 0.15
+
+pairs:
+  # A person and a dog count as "together" when the distance between their box centres is below
+  # this many pixels. The distance is in image pixels, so it depends on camera resolution and
+  # on how far the objects are from the camera.
+  distance_threshold: 100
+  # A pair is considered ended when it has not been seen for this many seconds. Keeps short
+  # detection gaps from splitting one encounter into several events.
+  lost_timeout_sec: 2.0
+  # While a pair stays together, log it and save another screenshot every this many seconds.
+  snapshot_interval_sec: 1.0
+
+screenshots:
+  # Directory where event screenshots are saved (created automatically).
+  dir: screenshots
+  # Hard lower bound between two saved screenshots, in seconds, regardless of events.
+  min_interval_sec: 0.33
+  # JPEG quality, 1-100. Lower means smaller files (95 is roughly 4x larger than 65).
+  jpeg_quality: 65
+  # Frames wider than this are downscaled (aspect ratio kept) before saving. 0 disables scaling.
+  max_width: 1920
+
+logging:
+  # Each log file is rotated when it reaches this size in bytes (30 MB).
+  max_bytes: 31457280
+  # Number of rotated backups to keep (<log>.1, <log>.2, ...) in addition to the current file.
+  backup_count: 3
+
+stream:
+  # Timeout in milliseconds for opening an RTSP connection and for reading a frame.
+  timeout_ms: 5000
+  # Reconnect back-off: start with min seconds, double after each failed attempt up to max.
+  reconnect_min_delay_sec: 1
+  reconnect_max_delay_sec: 30
+
+video:
+  # Stop analysing a video file after this many seconds of video (180 = 3 minutes).
+  max_duration_sec: 180
+
+display:
+  # The preview window is downscaled to fit these dimensions (frames are never upscaled).
+  max_width: 1920
+  max_height: 1080

@@ -1,131 +1,58 @@
-from ultralytics import YOLO
-import argparse
-import cv2
 import sys
-import numpy as np
-from common import (
-    PairTracker, ScreenshotSaver, collect_detections, draw_bounding_box, find_pairs,
-    redact_url, setup_logging, source_label,
-)
 
-LOG_FILE = "video-analyzer.log"
-logger = setup_logging(LOG_FILE)
+import cv2
 
-# --- Settings ---
+from pdd.detection import PairTracker
+from pdd.pipeline import handle_pair_events, load_model, process_frame, setup, show_frame, track_kwargs
+from pdd.screenshots import ScreenshotSaver
+from pdd.sources import redact_url, source_label
 
-MODEL_PATH = "models/yolo26l.engine"
+args, cfg, logger = setup("Detect persons and dogs in a video file.", "Path to the video file", "video-analyzer.log")
 
-# Distance threshold in pixels between person and dog centres to trigger an event
-DISTANCE_THRESHOLD = 100
+max_duration = cfg["video"]["max_duration_sec"]
+logger.info(f"Analyzing file: {redact_url(args.source)}")
 
-# A pair is considered ended after this many seconds without being seen;
-# while a pair persists, another screenshot is saved every PAIR_SNAPSHOT_INTERVAL_SEC
-PAIR_LOST_TIMEOUT_SEC = 2.0
-PAIR_SNAPSHOT_INTERVAL_SEC = 1.0
-
-# Per-class confidence thresholds (COCO class 0 = person, 16 = dog)
-CONF_THRESHOLDS = {
-    0: 0.2,   # person
-    16: 0.02,  # dog
-}
-MIN_CONF = min(CONF_THRESHOLDS.values())
-
-# Maximum video duration to analyse (seconds)
-MAX_DURATION_SEC = 3 * 60
-
-SCREENSHOTS_DIR = "screenshots"
-
-# Model input size; must match the size used when exporting the .engine file
-IMGSZ = 1280
-
-
-# --- Entry point ---
-
-parser = argparse.ArgumentParser(description="Detect persons and dogs in a video file.")
-parser.add_argument("video_file", help="Path to the video file")
-parser.add_argument("--no-display", action="store_true", help="Disable the video window (for headless servers)")
-args = parser.parse_args()
-
-VIDEO_FILE = args.video_file
-NO_DISPLAY = args.no_display
-logger.info(f"Analyzing file: {redact_url(VIDEO_FILE)}")
-
-cap = cv2.VideoCapture(VIDEO_FILE)
+cap = cv2.VideoCapture(args.source)
 if not cap.isOpened():
-    logger.error(f"Could not open video file: {VIDEO_FILE}")
+    logger.error(f"Could not open video file: {args.source}")
     sys.exit(1)
 
 fps = cap.get(cv2.CAP_PROP_FPS)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 cap.release()
 
-max_frames = min(int(fps * MAX_DURATION_SEC), total_frames)
-logger.info(f"FPS: {fps}, total frames: {total_frames}, analysing: {max_frames} frames (~{MAX_DURATION_SEC}s)")
+max_frames = min(int(fps * max_duration), total_frames)
+logger.info(f"FPS: {fps}, total frames: {total_frames}, analysing: {max_frames} frames (~{max_duration}s)")
 
-screenshots = ScreenshotSaver(SCREENSHOTS_DIR, source_label(VIDEO_FILE))
-pair_tracker = PairTracker(PAIR_LOST_TIMEOUT_SEC, PAIR_SNAPSHOT_INTERVAL_SEC)
-logger.info(f"Screenshots will be saved to: {SCREENSHOTS_DIR}/")
+screenshots = ScreenshotSaver.from_config(cfg, source_label(args.source))
+pair_tracker = PairTracker.from_config(cfg)
+logger.info(f"Screenshots will be saved to: {cfg['screenshots']['dir']}/")
 
 # Load and warm up the TensorRT model before processing the file
-logger.info("Warming up TensorRT model...")
-model = YOLO(MODEL_PATH)
-model.track(source=np.zeros((640, 640, 3), dtype=np.uint8), device='cuda:0', verbose=False)
+model = load_model(cfg, logger)
 
-# Use stream=True so frames are yielded one by one without loading the whole video into memory
-results = model.track(
-    source=VIDEO_FILE,
-    show=False,
-    classes=[0, 16],
-    conf=MIN_CONF,
-    stream=True,
-    imgsz=IMGSZ,
-    device='cuda:0',
-    verbose=False,
-    persist=True
-)
-
+# stream=True yields frames one by one without loading the whole video into memory
+results = model.track(source=args.source, stream=True, **track_kwargs(cfg))
 logger.info("Analysis started. Press 'Q' in the video window to stop.")
+
 
 # --- Main loop ---
 
 for frame_idx, result in enumerate(results):
     if frame_idx >= max_frames:
-        logger.info(f"Limit reached: {MAX_DURATION_SEC}s — stopping.")
+        logger.info(f"Limit reached: {max_duration}s, stopping.")
         break
 
     frame = result.orig_img.copy()
-    boxes = result.boxes
     time_sec = frame_idx / fps
+    process_frame(frame, result.boxes, time_sec, f"{time_sec:.1f}s", cfg, pair_tracker, screenshots, logger,
+                  log_suffix=f", time={time_sec:.1f}s")
 
-    # --- Collect detections (with false-positive filter) ---
-    persons, dogs = collect_detections(boxes, CONF_THRESHOLDS, MIN_CONF)
-    for p in persons:
-        draw_bounding_box(frame, *p["coords"], 0, p["conf"])
-    for d in dogs:
-        draw_bounding_box(frame, *d["coords"], 16, d["conf"])
+    if not args.no_display and show_frame("Video Analysis", frame, cfg):
+        logger.info("Analysis interrupted by user.")
+        break
 
-    # --- Distance check ---
-    pairs = find_pairs(persons, dogs, DISTANCE_THRESHOLD)
-    for event, (pkey, dkey), distance, duration in pair_tracker.update(pairs, time_sec):
-        if event == "end":
-            logger.info(f"Pair ended: {pkey} <-> {dkey}, duration={duration:.1f}s, time={time_sec:.1f}s")
-            continue
-        label = "Person with dog" if event == "start" else f"Person with dog (still together, {duration:.0f}s)"
-        logger.info(f"{label}: {pkey} <-> {dkey}, distance={distance:.0f}px, time={time_sec:.1f}s")
-        screenshots.save(frame, time_sec, f"{time_sec:.1f}s", logger)
-
-    if not NO_DISPLAY:
-        # Scale down to fit a 1080p monitor if needed
-        h, w = frame.shape[:2]
-        scale = min(1920 / w, 1080 / h, 1.0)
-        display_frame = cv2.resize(frame, (int(w * scale), int(h * scale))) if scale < 1.0 else frame
-        cv2.imshow("Video Analysis", display_frame)
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            logger.info("Analysis interrupted by user.")
-            break
-
-for _, (pkey, dkey), _, duration in pair_tracker.finish():
-    logger.info(f"Pair ended: {pkey} <-> {dkey}, duration={duration:.1f}s")
+handle_pair_events(pair_tracker.finish(), None, 0, "", screenshots, logger)
 
 cv2.destroyAllWindows()
 logger.info("Analysis finished.")
