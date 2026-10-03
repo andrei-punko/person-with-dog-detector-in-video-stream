@@ -156,7 +156,9 @@ Each script writes to its own log file and to the console:
 | `stream-analyzer.py` | `stream-analyzer.log` |
 | `video-analyzer.py` | `video-analyzer.log` |
 
-Both log files are git-ignored.
+Both log files are git-ignored. Logs are rotated: each file is capped at 30 MB and the 3 most recent
+backups are kept (`*.log.1`, `*.log.2`, `*.log.3`).
+
 ## Tests
 
 ```bash

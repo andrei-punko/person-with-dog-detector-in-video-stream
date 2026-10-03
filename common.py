@@ -5,19 +5,20 @@ import re
 import sys
 import threading
 import time
+from logging.handlers import RotatingFileHandler
 from urllib.parse import urlsplit
 
 import cv2
 
 
-def setup_logging(log_file):
-    """Configure logging to write to both a file and the console with a shared format."""
+def setup_logging(log_file, max_bytes=30 * 1024 * 1024, backup_count=3):
+    """Configure logging to write to a rotating file and the console with a shared format."""
     logging.basicConfig(
         level=logging.INFO,
         format='[%(asctime)s] %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S',
         handlers=[
-            logging.FileHandler(log_file, encoding='utf-8'),
+            RotatingFileHandler(log_file, maxBytes=max_bytes, backupCount=backup_count, encoding='utf-8'),
             logging.StreamHandler(sys.stdout),
         ]
     )
