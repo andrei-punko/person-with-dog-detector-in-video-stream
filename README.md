@@ -157,6 +157,15 @@ Each script writes to its own log file and to the console:
 | `video-analyzer.py` | `video-analyzer.log` |
 
 Both log files are git-ignored.
+## Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+The tests cover `common.py` (URL redaction, screenshot saving, detection filtering, pair tracking,
+threaded stream capture) and need neither a GPU nor a camera.
 
 ## Verify CUDA
 
