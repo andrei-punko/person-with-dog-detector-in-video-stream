@@ -34,7 +34,7 @@ Activate it:
 
 ```bash
 pip install -r requirements.txt
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+pip install "torch>=2.5.1" "torchvision>=0.20.1" --index-url https://download.pytorch.org/whl/cu121
 ```
 
 ### 4. Download the YOLO model

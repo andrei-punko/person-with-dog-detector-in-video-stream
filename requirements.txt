@@ -1,3 +1,6 @@
-ultralytics
-opencv-python
-tensorrt
+ultralytics>=8.4.171
+opencv-python>=5.0.0.93
+tensorrt>=11.3.0.99
+
+# Install torch and torchvision separately with the CUDA index (see README):
+# pip install torch>=2.5.1 torchvision>=0.20.1 --index-url https://download.pytorch.org/whl/cu121
