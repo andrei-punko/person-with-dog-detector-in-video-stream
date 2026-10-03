@@ -1,4 +1,4 @@
-# Person Dog Detector
+# Detector of person + dog pair in video stream or file
 
 Detects people and dogs in an RTSP stream or a video file using YOLO + TensorRT.  
 When a person and a dog are found closer than a configurable pixel threshold, a screenshot is saved to `screenshots/`.
@@ -6,7 +6,7 @@ When a person and a dog are found closer than a configurable pixel threshold, a 
 ## Requirements
 
 - Windows or Linux
-- NVIDIA GPU with CUDA (tested with CUDA 12.1)
+- NVIDIA GPU with CUDA (tested with CUDA 12.1 on RTX 3060)
 - Python 3.12
 - TensorRT (installed as part of `requirements.txt`)
 
@@ -19,7 +19,7 @@ git clone <repo-url>
 cd person-dog-detector
 ```
 
-### 2. Create a virtual environment
+### 2. Create Python virtual environment
 
 ```bash
 py -3.12 -m venv venv-gpu
@@ -46,7 +46,7 @@ models/
 └── yolo26l.pt
 ```
 
-### 5. Export to TensorRT engine
+### 5. Export to TensorRT engine (to speed up calculations)
 
 Run once to produce `models/yolo26l.engine` (requires a connected GPU):
 
@@ -54,7 +54,7 @@ Run once to produce `models/yolo26l.engine` (requires a connected GPU):
 python utils/convert-model-to-engine.py
 ```
 
-### 6. Configure credentials
+### 6. Configure credentials of RTSP stream from IP-camera
 
 Copy `.env-sample` to `.env` and fill in your RTSP URL:
 
@@ -64,7 +64,7 @@ cp .env-sample .env
 
 ## Usage
 
-### Analyse an RTSP stream
+### Analyze an RTSP stream
 
 ```bash
 # Using the launcher (reads RTSP_URL from .env):
@@ -82,7 +82,7 @@ Use `--no-display` to run without a video window (e.g. on a headless server):
 python stream-analyzer.py --no-display rtsp://user:password@192.168.1.80:554/stream1
 ```
 
-### Analyse a video file
+### Analyze a video file
 
 ```bash
 # Using the launcher (pass the file as an argument):
@@ -101,9 +101,11 @@ Analysis stops after `video.max_duration_sec` seconds (default: 3 minutes) or wh
 
 1. Frames are passed through YOLO tracking (TensorRT engine, FP16).
 2. Detections are filtered by per-class confidence thresholds.
-3. A geometric filter drops low-confidence dog detections whose centre falls inside a person box (common false positive: person wearing a hood).
+3. A geometric filter drops low-confidence dog detections whose centre falls inside a person box (common false positive: person wearing a
+   hood).
 4. The Euclidean distance between each person centre and each dog centre is compared against `pairs.distance_threshold`.
-5. Pairs are tracked by tracker ID: a screenshot is saved when a pair starts and then every `pairs.snapshot_interval_sec` while it persists. A pair ends after `pairs.lost_timeout_sec` without being seen.
+5. Pairs are tracked by tracker ID: a screenshot is saved when a pair starts and then every `pairs.snapshot_interval_sec` while it persists.
+   A pair ends after `pairs.lost_timeout_sec` without being seen.
 
 ## Settings
 
@@ -116,14 +118,14 @@ python stream-analyzer.py --config my.yaml rtsp://user:password@192.168.1.80:554
 
 Main settings:
 
-| Key | Default | Description |
-|---|---|---|
-| `pairs.distance_threshold` | `100` | Pixel distance between centres to count as a pair |
-| `detection.conf_person` / `conf_dog` | `0.2` / `0.02` | Per-class confidence floor (dog is low on purpose, to see distant dogs) |
-| `video.max_duration_sec` | `180` | Video analysis time limit (seconds) |
-| `model.imgsz` | `1280` | Model input size, must match the exported engine |
-| `stream.timeout_ms` | `5000` | RTSP connect / read timeout (ms) |
-| `stream.reconnect_min_delay_sec` / `max` | `1` / `30` | Reconnect back-off range (seconds) |
+| Key                                      | Default        | Description                                                             |
+|------------------------------------------|----------------|-------------------------------------------------------------------------|
+| `pairs.distance_threshold`               | `100`          | Pixel distance between centres to count as a pair                       |
+| `detection.conf_person` / `conf_dog`     | `0.2` / `0.02` | Per-class confidence floor (dog is low on purpose, to see distant dogs) |
+| `video.max_duration_sec`                 | `180`          | Video analysis time limit (seconds)                                     |
+| `model.imgsz`                            | `1280`         | Model input size, must match the exported engine                        |
+| `stream.timeout_ms`                      | `5000`         | RTSP connect / read timeout (ms)                                        |
+| `stream.reconnect_min_delay_sec` / `max` | `1` / `30`     | Reconnect back-off range (seconds)                                      |
 
 ## Project structure
 
@@ -158,19 +160,19 @@ person-dog-detector/
 
 ## Screenshot naming
 
-| Source | Example |
-|---|---|
-| Stream | `192_168_1_80_554_stream1_20261003_154356_123.jpg` |
-| Video file | `01_7.7s.jpg` |
+| Source     | Example                                            |
+|------------|----------------------------------------------------|
+| Stream     | `192_168_1_80_554_stream1_20261003_154356_123.jpg` |
+| Video file | `01_7.7s.jpg`                                      |
 
 ## Logs
 
 Each script writes to its own log file and to the console:
 
-| Script | Log file |
-|---|---|
+| Script               | Log file                   |
+|----------------------|----------------------------|
 | `stream-analyzer.py` | `logs/stream-analyzer.log` |
-| `video-analyzer.py` | `logs/video-analyzer.log` |
+| `video-analyzer.py`  | `logs/video-analyzer.log`  |
 
 The directory is set by `logging.dir` in `config.yaml` and is created automatically.
 
@@ -187,7 +189,9 @@ pytest
 The tests cover the `pdd` package (config, URL redaction, screenshot saving, detection filtering, pair tracking,
 threaded stream capture) and need neither a GPU nor a camera.
 
-## Verify CUDA
+## Appendixes
+
+### Verify is CUDA installed properly
 
 ```bash
 python utils/check-cuda.py
