@@ -43,6 +43,10 @@ max_frames = min(int(fps * MAX_DURATION_SEC), total_frames)
 
 print(f"FPS: {fps}, Всего кадров: {total_frames}, Анализируем: {max_frames} кадров (~{MAX_DURATION_SEC} сек)")
 
+# Обрабатывать ~10 кадров в секунду независимо от FPS видео
+frame_skip = max(1, int(fps / 10))
+print(f"Frame skip: каждый {frame_skip}-й кадр (~10 кадров/сек)")
+
 # Создаём папку для скриншотов
 os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
 print(f"Скриншоты будут сохранены в: {SCREENSHOTS_DIR}/")
@@ -61,7 +65,7 @@ results = model.track(
 last_screenshot_time = -1.0
 
 for frame_idx, result in enumerate(results):
-    if frame_idx % 2 != 0:
+    if frame_idx % frame_skip != 0:
         continue
 
     if frame_idx >= max_frames:

@@ -49,6 +49,10 @@ if VIDEO_WIDTH <= 0 or VIDEO_HEIGHT <= 0:
 
 print(f"FPS: {fps}, Разрешение: {VIDEO_WIDTH}x{VIDEO_HEIGHT}")
 
+# Обрабатывать ~10 кадров в секунду независимо от FPS потока
+frame_skip = max(1, int(fps / 10))
+print(f"Frame skip: каждый {frame_skip}-й кадр (~10 кадров/сек)")
+
 # Размер входного кадра для модели (не больше 1920, кратен 32)
 IMGSZ = min(VIDEO_WIDTH, VIDEO_HEIGHT, 1920)
 IMGSZ = (IMGSZ // 32) * 32
@@ -69,7 +73,7 @@ while True:
         print("Поток завершён или ошибка чтения кадра.")
         break
 
-    if frame_idx % 2 != 0:
+    if frame_idx % frame_skip != 0:
         frame_idx += 1
         continue
 
