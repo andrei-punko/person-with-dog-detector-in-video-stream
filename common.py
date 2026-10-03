@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import re
 import sys
@@ -154,7 +155,8 @@ def draw_bounding_box(frame, x1, y1, x2, y2, cls, conf):
 def collect_detections(boxes, conf_thresholds, default_conf=0.25):
     """Split YOLO boxes into persons and dogs, applying per-class thresholds and the false-positive filter.
 
-    Returns two lists of {"coords": (x1, y1, x2, y2), "center": (cx, cy), "conf": float}.
+    Returns two lists of {"id": int | None, "coords": (x1, y1, x2, y2), "center": (cx, cy), "conf": float}.
+    "id" is the tracker ID and is None when the tracker has not assigned one yet.
     """
     persons = []
     dogs = []
@@ -167,7 +169,13 @@ def collect_detections(boxes, conf_thresholds, default_conf=0.25):
         if conf < conf_thresholds.get(cls, default_conf):
             continue
         x1, y1, x2, y2 = box.xyxy[0].int().tolist()
-        det = {"coords": (x1, y1, x2, y2), "center": ((x1 + x2) / 2, (y1 + y2) / 2), "conf": conf}
+        track_id = int(box.id) if getattr(box, "id", None) is not None else None
+        det = {
+            "id": track_id,
+            "coords": (x1, y1, x2, y2),
+            "center": ((x1 + x2) / 2, (y1 + y2) / 2),
+            "conf": conf,
+        }
         if cls == 0:
             persons.append(det)
         elif cls == 16:
@@ -182,3 +190,59 @@ def collect_detections(boxes, conf_thresholds, default_conf=0.25):
 
     dogs = [d for d in dogs if not (d["conf"] < DOG_INSIDE_PERSON_MAX_CONF and inside_person(d))]
     return persons, dogs
+
+
+def find_pairs(persons, dogs, distance_threshold):
+    """Return {(person_key, dog_key): distance} for every person/dog pair closer than the threshold.
+
+    Keys are tracker IDs ("p3", "d7"); a detection without an ID falls back to its list index ("p#0").
+    """
+    pairs = {}
+    for i, p in enumerate(persons):
+        pkey = f"p{p['id']}" if p["id"] is not None else f"p#{i}"
+        for j, d in enumerate(dogs):
+            dkey = f"d{d['id']}" if d["id"] is not None else f"d#{j}"
+            distance = math.dist(p["center"], d["center"])
+            if distance < distance_threshold:
+                pairs[(pkey, dkey)] = distance
+    return pairs
+
+
+class PairTracker:
+    """Turn per-frame person/dog pairs into events: a pair starts, is still going, or ends.
+
+    A pair is considered ended when it has not been seen for lost_timeout seconds, so a few
+    missed detections do not split one encounter into several. While a pair persists, an
+    "ongoing" event is emitted every snapshot_interval seconds (e.g. to save another screenshot).
+    All times are in seconds on whatever clock the caller uses (wall clock or video time).
+    """
+
+    def __init__(self, lost_timeout=2.0, snapshot_interval=5.0):
+        self.lost_timeout = lost_timeout
+        self.snapshot_interval = snapshot_interval
+        self.active = {}
+
+    def update(self, pairs, now):
+        """Return a list of (event, key, distance, duration) tuples; event is "start", "ongoing" or "end"."""
+        events = []
+        for key, distance in pairs.items():
+            state = self.active.get(key)
+            if state is None:
+                self.active[key] = {"start": now, "last_seen": now, "last_snap": now}
+                events.append(("start", key, distance, 0.0))
+                continue
+            state["last_seen"] = now
+            if now - state["last_snap"] >= self.snapshot_interval:
+                state["last_snap"] = now
+                events.append(("ongoing", key, distance, now - state["start"]))
+
+        for key in [k for k, s in self.active.items() if k not in pairs and now - s["last_seen"] >= self.lost_timeout]:
+            state = self.active.pop(key)
+            events.append(("end", key, None, state["last_seen"] - state["start"]))
+        return events
+
+    def finish(self):
+        """End all active pairs (call when the input is over)."""
+        events = [("end", key, None, s["last_seen"] - s["start"]) for key, s in self.active.items()]
+        self.active.clear()
+        return events

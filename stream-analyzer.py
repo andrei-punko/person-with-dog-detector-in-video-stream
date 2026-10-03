@@ -1,13 +1,20 @@
 from ultralytics import YOLO
 import argparse
 import cv2
-import math
 import time
 import numpy as np
-from common import ScreenshotSaver, ThreadedVideoCapture, collect_detections, draw_bounding_box, redact_url, setup_logging, source_label
+from common import (
+    PairTracker, ScreenshotSaver, ThreadedVideoCapture, collect_detections, draw_bounding_box,
+    find_pairs, redact_url, setup_logging, source_label,
+)
 
 LOG_FILE = "stream-analyzer.log"
 logger = setup_logging(LOG_FILE)
+
+
+def log_pair_end(pkey, dkey, duration):
+    """Log that a person/dog pair is no longer together."""
+    logger.info(f"Pair ended: {pkey} <-> {dkey}, duration={duration:.1f}s")
 
 
 def log_time(res):
@@ -26,6 +33,11 @@ MODEL_PATH = "models/yolo26l.engine"
 
 # Distance threshold in pixels between person and dog centres to trigger an event
 DISTANCE_THRESHOLD = 100
+
+# A pair is considered ended after this many seconds without being seen;
+# while a pair persists, another screenshot is saved every PAIR_SNAPSHOT_INTERVAL_SEC
+PAIR_LOST_TIMEOUT_SEC = 2.0
+PAIR_SNAPSHOT_INTERVAL_SEC = 5.0
 
 # Per-class confidence thresholds (COCO class 0 = person, 16 = dog)
 CONF_THRESHOLDS = {
@@ -55,6 +67,7 @@ STREAM_URL = args.stream_url
 NO_DISPLAY = args.no_display
 STREAM_URL_SAFE = redact_url(STREAM_URL)
 screenshots = ScreenshotSaver(SCREENSHOTS_DIR, source_label(STREAM_URL))
+pair_tracker = PairTracker(PAIR_LOST_TIMEOUT_SEC, PAIR_SNAPSHOT_INTERVAL_SEC)
 logger.info(f"Stream source: {STREAM_URL_SAFE}")
 
 # Load and warm up the TensorRT model before opening the stream
@@ -74,6 +87,9 @@ try:
     while True:
         frame = cap.read(timeout=1.0)
         if frame is None:
+            # No frames (stream down): still let lost pairs expire
+            for event, (pkey, dkey), _, duration in pair_tracker.update({}, time.time()):
+                log_pair_end(pkey, dkey, duration)
             if not NO_DISPLAY and cv2.waitKey(1) & 0xFF == ord('q'):
                 logger.info("Analysis stopped by user.")
                 break
@@ -103,15 +119,15 @@ try:
             draw_bounding_box(frame, *d["coords"], 16, d["conf"])
 
         # --- Distance check ---
-        for i, p in enumerate(persons):
-            px, py = p["center"]
-            for j, d in enumerate(dogs):
-                dx, dy = d["center"]
-                distance = math.sqrt((px - dx) ** 2 + (py - dy) ** 2)
-                if distance < DISTANCE_THRESHOLD:
-                    logger.info(f"Person with dog: person#{i} <-> dog#{j}, distance={distance:.0f}px")
-                    timestamp = f"{time.strftime('%Y%m%d_%H%M%S', time.localtime(time_sec))}_{int(time_sec * 1000) % 1000:03d}"
-                    screenshots.save(frame, time_sec, timestamp, logger)
+        pairs = find_pairs(persons, dogs, DISTANCE_THRESHOLD)
+        for event, (pkey, dkey), distance, duration in pair_tracker.update(pairs, time_sec):
+            if event == "end":
+                log_pair_end(pkey, dkey, duration)
+                continue
+            label = "Person with dog" if event == "start" else f"Person with dog (still together, {duration:.0f}s)"
+            logger.info(f"{label}: {pkey} <-> {dkey}, distance={distance:.0f}px")
+            timestamp = f"{time.strftime('%Y%m%d_%H%M%S', time.localtime(time_sec))}_{int(time_sec * 1000) % 1000:03d}"
+            screenshots.save(frame, time_sec, timestamp, logger)
 
         if not NO_DISPLAY:
             # Scale down to fit a 1080p monitor if needed
@@ -126,6 +142,8 @@ try:
 except KeyboardInterrupt:
     logger.info("Analysis interrupted by Ctrl+C.")
 finally:
+    for _, (pkey, dkey), _, duration in pair_tracker.finish():
+        log_pair_end(pkey, dkey, duration)
     cap.stop()
     if not NO_DISPLAY:
         cv2.destroyAllWindows()
