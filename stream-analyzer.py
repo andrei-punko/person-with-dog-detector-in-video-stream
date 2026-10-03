@@ -5,6 +5,7 @@ import os
 import sys
 import time
 import logging
+import numpy as np
 
 # Logging setup
 LOG_FILE = "stream-analyzer.log"
@@ -18,67 +19,72 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Load pretrained YOLO model (knows classes: 0=person, 16=dog)
-model = YOLO("models/yolo26l.pt")
+
+def draw_bounding_box(frame, x1, y1, x2, y2, cls, conf):
+    """Рисует рамку и метку класса на кадре."""
+    label = "person" if cls == 0 else "dog"
+    color = (0, 255, 0) if cls == 0 else (0, 0, 255)
+
+    # Отрисовка прямоугольника объекта
+    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+
+    # Отрисовка текста с подложкой или просто поверх
+    cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+def log_time(res):
+    # Извлекаем время в миллисекундах из словаря скоростей модели
+    preprocess_speed = res.speed.get('preprocess', 0.0)
+    inference_speed = res.speed.get('inference', 0.0)
+    postprocess_speed = res.speed.get('postprocess', 0.0)
+    total_speed = preprocess_speed + inference_speed + postprocess_speed
+
+    # Считаем реальный FPS обработки видеокартой
+    fps_hardware = 1000 / total_speed if total_speed > 0 else 0.0
+
+    logger.info(f"SPEED: Inference: {inference_speed:.1f}ms | Total: {total_speed:.1f}ms ({fps_hardware:.1f} FPS)")
+
+
+# Load pretrained YOLO model
+model = YOLO("models/yolo26l.engine")
+
+# "Прогрев" TensorRT модели (warmup)
+logger.info("Warming up TensorRT model...")
+model.track(source=np.zeros((640, 640, 3), dtype=np.uint8), device='cuda:0', verbose=False)
 
 # Distance threshold in real video pixels
 DISTANCE_THRESHOLD = 100
 
-# Screenshots folder
-SCREENSHOTS_DIR = "screenshots"
+# Пороги уверенности
+CONF_THRESHOLDS = {
+    0: 0.2,   # person
+    16: 0.02,  # dog
+}
 
-# Get stream source from command line arguments
+SCREENSHOTS_DIR = "screenshots"
+os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
+
 if len(sys.argv) < 2:
     print("Usage: python stream-analyzer.py <stream_url>")
-    print("Examples:")
-    print("  python stream-analyzer.py rtsp://login:password@192.168.1.80:554/stream1")
-    print("  python stream-analyzer.py http://192.168.1.100:8080/video")
-    print("  python stream-analyzer.py 0  # webcam")
     sys.exit(1)
 
 STREAM_URL = sys.argv[1]
-# If argument is a number, it's a camera index
-if STREAM_URL.isdigit():
-    STREAM_URL = int(STREAM_URL)
-
 logger.info(f"Stream source: {STREAM_URL}")
 
-# Connect to stream
 cap = cv2.VideoCapture(STREAM_URL)
 if not cap.isOpened():
     logger.error(f"Could not connect to stream {STREAM_URL}")
     sys.exit(1)
 
-# Get stream parameters
 fps = cap.get(cv2.CAP_PROP_FPS)
-if fps <= 0:
-    fps = 30.0  # default for streams without FPS
 VIDEO_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 VIDEO_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-if VIDEO_WIDTH <= 0 or VIDEO_HEIGHT <= 0:
-    VIDEO_WIDTH = 1920
-    VIDEO_HEIGHT = 1080
-
 logger.info(f"FPS: {fps}, Resolution: {VIDEO_WIDTH}x{VIDEO_HEIGHT}")
 
-# Process ~10 frames per second regardless of stream FPS
-frame_skip = max(1, int(fps / 10))
-logger.info(f"Frame skip: every {frame_skip} frames (~10 fps)")
-
-# Input frame size for the model (max 1920, multiple of 32)
-IMGSZ = min(VIDEO_WIDTH, VIDEO_HEIGHT, 1920)
-IMGSZ = (IMGSZ // 32) * 32
-
-logger.info(f"IMGSZ: {IMGSZ}")
-
-# Create screenshots folder
-os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
-logger.info(f"Screenshots will be saved to: {SCREENSHOTS_DIR}/")
-logger.info("Analysis started. Stop with Ctrl+C")
+IMGSZ = 1280
+logger.info("Analysis started. Press 'Q' in the video window to stop.")
 
 last_screenshot_time = -1.0
-frame_idx = 0
 
 while True:
     ret, frame = cap.read()
@@ -86,87 +92,118 @@ while True:
         logger.info("Stream ended or frame read error.")
         break
 
-    if frame_idx % frame_skip != 0:
-        frame_idx += 1
-        continue
-
-    # Current system time
     time_sec = time.time()
 
-    # Run tracking on current frame
+    # Запускаем трекинг
     results = model.track(
         source=frame,
         show=False,
         classes=[0, 16],
-        conf=0.03,
+        conf=min(CONF_THRESHOLDS.values()),
         imgsz=IMGSZ,
         device='cuda:0',
         verbose=False,
+        persist=True
     )
 
     result = results[0]
-    num_boxes = len(result.boxes)
-    timestamp = time.strftime('%H:%M:%S', time.localtime(time_sec))
-    logger.info(f"Frame {frame_idx}: {num_boxes} objects detected")
-
-    # 1. Get coordinates of all persons and dogs in the frame
+    # log processing speed (inference in ms)
+    # log_time(result)
     boxes = result.boxes
+
     persons = []
     dogs = []
 
-    for box in boxes:
-        cls = int(box.cls[0])
-        conf = float(box.conf[0])
-        x1, y1, x2, y2 = box.xyxy[0].tolist()
+    # --- СБОР ДАННЫХ И ОТРИСОВКА ---
+    raw_persons = []
+    raw_dogs = []
+
+    if boxes is not None and len(boxes) > 0:
+        for box in boxes:
+            cls = int(box.cls)
+            conf = float(box.conf)
+
+            # Проверка по вашему словарю порогов
+            if conf < CONF_THRESHOLDS.get(cls, 0.25):
+                continue
+
+            x1, y1, x2, y2 = box.xyxy[0].int().tolist()
+
+            # Сохраняем все детекции во временные списки для геометрического анализа
+            if cls == 0:
+                raw_persons.append({"coords": (x1, y1, x2, y2), "conf": conf})
+            elif cls == 16:
+                raw_dogs.append({"coords": (x1, y1, x2, y2), "conf": conf})
+
+    # --- ГЕОМЕТРИЧЕСКИЙ ФИЛЬТР ЛОЖНЫХ НАЛОЖЕНИЙ ---
+    persons = []
+    dogs = []
+
+    # 1. Сначала утверждаем всех валидных людей
+    for p in raw_persons:
+        x1, y1, x2, y2 = p["coords"]
         cx = (x1 + x2) / 2
         cy = (y1 + y2) / 2
-        if cls == 0:
-            persons.append((cx, cy))
-        elif cls == 16:
-            dogs.append((cx, cy))
+        persons.append((cx, cy))
+        draw_bounding_box(frame, x1, y1, x2, y2, 0, p["conf"])
 
-    # 2. Calculate distances between them (with conversion to real pixels)
-    scale = VIDEO_WIDTH / IMGSZ
+    # 2. Фильтруем собак, проверяя, не сидят ли они на голове у человека
+    for d in raw_dogs:
+        dx1, dy1, dx2, dy2 = d["coords"]
+        dcx = (dx1 + dx2) / 2
+        dcy = (dy1 + dy2) / 2
+
+        is_false_dog = False
+
+        for p in raw_persons:
+            px1, py1, px2, py2 = p["coords"]
+
+            # Проверяем, находится ли центр "собаки" внутри рамки человека
+            # Или перекрывает ли рамка собаки верхнюю часть тела (голову/плечи)
+            if (px1 <= dcx <= px2) and (py1 <= dcy <= py2):
+                # Если собака внутри человека, но ее conf очень низкий — это 100% ошибка капюшона
+                if d["conf"] < 0.15:
+                    is_false_dog = True
+                    break
+
+        if not is_false_dog:
+            dogs.append((dcx, dcy))
+            draw_bounding_box(frame, dx1, dy1, dx2, dy2, 16, d["conf"])
+
+    if len(persons) > 0 or len(dogs) > 0:
+        logger.info(f"Detected: {len(persons)} persons, {len(dogs)} dogs")
+
+    # --- РАСЧЕТ РАССТОЯНИЙ ---
     for i, (px, py) in enumerate(persons):
         for j, (dx, dy) in enumerate(dogs):
-            distance_model = math.sqrt((px - dx) ** 2 + (py - dy) ** 2)
-            distance_real = distance_model * scale
+            distance_real = math.sqrt((px - dx) ** 2 + (py - dy) ** 2)
 
-            # 3. If distance is less than N pixels -> log "Person with dog"
             if distance_real < DISTANCE_THRESHOLD:
-                timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time_sec))
                 logger.info(f"Person with dog: person#{i} <-> dog#{j}, distance = {distance_real:.0f}px")
 
-                # Save screenshot (no more than once per second)
-                if time_sec - last_screenshot_time >= 1.0:
+                # Сохранение скриншота (не чаще 3 раз в секунду)
+                if time_sec - last_screenshot_time >= 0.33:
                     stream_name = str(STREAM_URL).replace("/", "_").replace(":", "_").replace(".", "_")
                     screenshot_path = os.path.join(SCREENSHOTS_DIR, f"{stream_name}_{time.strftime('%Y%m%d_%H%M%S', time.localtime(time_sec))}.jpg")
                     cv2.imwrite(screenshot_path, frame)
                     last_screenshot_time = time_sec
                     logger.info(f"  Screenshot saved: {screenshot_path}")
 
-    # Draw bounding boxes on the frame
-    for box in boxes:
-        cls = int(box.cls[0])
-        conf = float(box.conf[0])
-        x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-        label = "person" if cls == 0 else "dog"
-        color = (0, 255, 0) if cls == 0 else (0, 0, 255)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-
-    frame_idx += 1
-
-    # Scale window to fit FHD (1920x1080)
+    # Изменение размера окна для вывода на экран (масштабируем под FHD)
     max_width = 1920
     max_height = 1080
     h, w = frame.shape[:2]
-    scale = min(max_width / w, max_height / h, 1.0)
-    if scale < 1.0:
-        frame = cv2.resize(frame, (int(w * scale), int(h * scale)))
+    scale_window = min(max_width / w, max_height / h, 1.0)
 
-    cv2.imshow("Stream", frame)
-    cv2.waitKey(1)
+    display_frame = frame
+    if scale_window < 1.0:
+        display_frame = cv2.resize(frame, (int(w * scale_window), int(h * scale_window)))
+
+    cv2.imshow("Stream", display_frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        logger.info("Analysis stopped by user.")
+        break
 
 cap.release()
 cv2.destroyAllWindows()
