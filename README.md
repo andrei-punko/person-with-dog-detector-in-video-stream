@@ -86,7 +86,7 @@ python stream-analyzer.py --no-display rtsp://user:password@192.168.1.80:554/str
 
 ```bash
 # Using the launcher (pass the file as an argument):
-start-video-analyzer.bat videos\01.mp4
+./start-video-analyzer.sh videos/01.mp4
 
 # Or directly:
 python video-analyzer.py videos/01.mp4
@@ -133,8 +133,8 @@ person-dog-detector/
 ├── stream-analyzer.py          # RTSP stream analyser
 ├── video-analyzer.py           # Video file analyser
 ├── check-cuda.py               # Verify CUDA availability
-├── start-stream-analyzer.sh    # Linux/macOS launcher (reads .env)
-├── start-video-analyzer.bat    # Windows launcher
+├── start-stream-analyzer.sh    # Launcher (reads .env), Windows Git Bash / Linux / macOS
+├── start-video-analyzer.sh     # Video file launcher
 ├── requirements.txt
 ├── .env-sample
 └── README.md
