@@ -18,5 +18,6 @@ if [ -z "$RTSP_URL" ]; then
     exit 1
 fi
 
-echo "Starting stream analysis: $RTSP_URL"
+# Print the URL without "rtsp://login:password@" so credentials don't leak to the console
+echo "Starting stream analysis: ${RTSP_URL#*@}"
 python stream-analyzer.py "$RTSP_URL"

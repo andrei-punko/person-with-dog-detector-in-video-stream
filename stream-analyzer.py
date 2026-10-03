@@ -5,7 +5,9 @@ import os
 import sys
 import time
 import logging
+import re
 import numpy as np
+from urllib.parse import urlsplit
 
 # Logging setup
 LOG_FILE = "stream-analyzer.log"
@@ -30,6 +32,25 @@ def draw_bounding_box(frame, x1, y1, x2, y2, cls, conf):
 
     # Отрисовка текста с подложкой или просто поверх
     cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+def redact_url(url):
+    """Возвращает URL без логина, пароля и query-параметров (безопасно для логов)."""
+    parts = urlsplit(url)
+    if parts.username is None and parts.password is None and not parts.query:
+        return url
+    host = parts.hostname or ""
+    if parts.port:
+        host += f":{parts.port}"
+    netloc = f"***@{host}" if (parts.username is not None or parts.password is not None) else parts.netloc
+    return parts._replace(netloc=netloc, query="***" if parts.query else "").geturl()
+
+
+def stream_label(url):
+    """Короткое имя потока для файлов: хост, порт и путь, без учетных данных."""
+    parts = urlsplit(url)
+    raw = f"{parts.hostname or 'stream'}_{parts.port or ''}_{parts.path}"
+    return re.sub(r"[^A-Za-z0-9]+", "_", raw).strip("_")
+
 
 def log_time(res):
     # Извлекаем время в миллисекундах из словаря скоростей модели
@@ -68,11 +89,13 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 STREAM_URL = sys.argv[1]
-logger.info(f"Stream source: {STREAM_URL}")
+STREAM_URL_SAFE = redact_url(STREAM_URL)
+STREAM_LABEL = stream_label(STREAM_URL)
+logger.info(f"Stream source: {STREAM_URL_SAFE}")
 
 cap = cv2.VideoCapture(STREAM_URL)
 if not cap.isOpened():
-    logger.error(f"Could not connect to stream {STREAM_URL}")
+    logger.error(f"Could not connect to stream {STREAM_URL_SAFE}")
     sys.exit(1)
 
 fps = cap.get(cv2.CAP_PROP_FPS)
@@ -183,8 +206,7 @@ while True:
 
                 # Сохранение скриншота (не чаще 3 раз в секунду)
                 if time_sec - last_screenshot_time >= 0.33:
-                    stream_name = str(STREAM_URL).replace("/", "_").replace(":", "_").replace(".", "_")
-                    screenshot_path = os.path.join(SCREENSHOTS_DIR, f"{stream_name}_{time.strftime('%Y%m%d_%H%M%S', time.localtime(time_sec))}.jpg")
+                    screenshot_path = os.path.join(SCREENSHOTS_DIR, f"{STREAM_LABEL}_{time.strftime('%Y%m%d_%H%M%S', time.localtime(time_sec))}.jpg")
                     cv2.imwrite(screenshot_path, frame)
                     last_screenshot_time = time_sec
                     logger.info(f"  Screenshot saved: {screenshot_path}")
