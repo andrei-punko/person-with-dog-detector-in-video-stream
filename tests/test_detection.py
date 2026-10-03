@@ -95,33 +95,57 @@ def test_collect_empty_boxes(boxes):
 
 # --- find_pairs ---
 
-def det(track_id, cx, cy):
-    return {"id": track_id, "center": (cx, cy)}
+def det(track_id, cx, cy, height=100):
+    """Detection centred at (cx, cy) with a box of the given height."""
+    h = height / 2
+    return {"id": track_id, "center": (cx, cy), "coords": (cx - 10, cy - h, cx + 10, cy + h)}
 
 
-def test_find_pairs_uses_track_ids():
-    pairs = find_pairs([det(3, 0, 0)], [det(7, 30, 40)], 100)
+def test_find_pairs_uses_track_ids_and_reports_distance_in_person_heights():
+    # centres 50 px apart, person is 100 px tall -> 0.5 heights
+    pairs = find_pairs([det(3, 0, 0)], [det(7, 30, 40, height=20)], 1.0)
     assert list(pairs) == [("p3", "d7")]
-    assert pairs[("p3", "d7")] == pytest.approx(50.0)
+    assert pairs[("p3", "d7")] == pytest.approx(0.5)
 
 
 def test_find_pairs_distance_equal_to_threshold_is_not_a_pair():
-    assert find_pairs([det(1, 0, 0)], [det(2, 100, 0)], 100) == {}
+    assert find_pairs([det(1, 0, 0)], [det(2, 50, 0)], 0.5) == {}
 
 
 def test_find_pairs_far_apart():
-    assert find_pairs([det(1, 0, 0)], [det(2, 500, 0)], 100) == {}
+    assert find_pairs([det(1, 0, 0)], [det(2, 500, 0)], 0.5) == {}
+
+
+@pytest.mark.parametrize("scale", [0.25, 1, 4])
+def test_find_pairs_is_scale_invariant(scale):
+    # The same layout scaled up or down must give the same verdict
+    near = find_pairs([det(1, 0, 0, height=200 * scale)], [det(2, 80 * scale, 0)], 0.5)
+    far = find_pairs([det(1, 0, 0, height=200 * scale)], [det(2, 120 * scale, 0)], 0.5)
+    assert list(near) == [("p1", "d2")]
+    assert far == {}
+
+
+def test_find_pairs_uses_height_of_the_paired_person():
+    persons = [det(1, 0, 0, height=400), det(2, 1000, 0, height=100)]
+    dogs = [det(5, 150, 0), det(6, 1150, 0)]
+    # 150 px is 0.375 heights for the tall person but 1.5 heights for the short one
+    assert set(find_pairs(persons, dogs, 0.5)) == {("p1", "d5")}
+
+
+def test_find_pairs_zero_height_box_does_not_crash():
+    person = {"id": 1, "center": (0, 0), "coords": (0, 5, 10, 5)}
+    assert find_pairs([person], [det(2, 0, 0)], 0.5) == {("p1", "d2"): 0.0}
 
 
 def test_find_pairs_falls_back_to_index_without_ids():
-    pairs = find_pairs([det(None, 0, 0)], [det(None, 10, 0)], 100)
+    pairs = find_pairs([det(None, 0, 0)], [det(None, 10, 0)], 0.5)
     assert list(pairs) == [("p#0", "d#0")]
 
 
 def test_find_pairs_multiple():
     persons = [det(1, 0, 0), det(2, 1000, 0)]
     dogs = [det(5, 10, 0), det(6, 1010, 0)]
-    assert set(find_pairs(persons, dogs, 100)) == {("p1", "d5"), ("p2", "d6")}
+    assert set(find_pairs(persons, dogs, 0.5)) == {("p1", "d5"), ("p2", "d6")}
 
 
 # --- PairTracker ---

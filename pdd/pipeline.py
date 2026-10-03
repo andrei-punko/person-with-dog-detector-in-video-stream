@@ -73,7 +73,7 @@ def handle_pair_events(events, frame, now, suffix, screenshots, logger, log_suff
             logger.info(f"Pair ended: {pkey} <-> {dkey}, duration={duration:.1f}s{log_suffix}")
             continue
         label = "Person with dog" if event == "start" else f"Person with dog (still together, {duration:.0f}s)"
-        logger.info(f"{label}: {pkey} <-> {dkey}, distance={distance:.0f}px{log_suffix}")
+        logger.info(f"{label}: {pkey} <-> {dkey}, distance={distance:.2f} person heights{log_suffix}")
         screenshots.save(frame, now, suffix, logger)
 
 
@@ -81,7 +81,7 @@ def process_frame(frame, boxes, now, suffix, cfg, tracker, screenshots, logger, 
     """Detect persons and dogs, draw them on the frame, track pairs and report pair events."""
     persons, dogs = collect_detections(boxes, class_thresholds(cfg), cfg["detection"]["dog_inside_person_max_conf"])
     draw_detections(frame, persons, dogs)
-    pairs = find_pairs(persons, dogs, cfg["pairs"]["distance_threshold"])
+    pairs = find_pairs(persons, dogs, cfg["pairs"]["max_distance_ratio"])
     handle_pair_events(tracker.update(pairs, now), frame, now, suffix, screenshots, logger, log_suffix)
 
 

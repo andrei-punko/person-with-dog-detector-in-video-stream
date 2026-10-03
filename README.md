@@ -103,7 +103,7 @@ Analysis stops after `video.max_duration_sec` seconds (default: 3 minutes) or wh
 2. Detections are filtered by per-class confidence thresholds.
 3. A geometric filter drops low-confidence dog detections whose centre falls inside a person box (common false positive: person wearing a
    hood).
-4. The Euclidean distance between each person centre and each dog centre is compared against `pairs.distance_threshold`.
+4. The distance between each person centre and each dog centre, divided by the person's box height, is compared against `pairs.max_distance_ratio`. This keeps the rule the same for near and far pairs.
 5. Pairs are tracked by tracker ID: a screenshot is saved when a pair starts and then every `pairs.snapshot_interval_sec` while it persists.
    A pair ends after `pairs.lost_timeout_sec` without being seen.
 
@@ -120,7 +120,7 @@ Main settings:
 
 | Key                                      | Default        | Description                                                             |
 |------------------------------------------|----------------|-------------------------------------------------------------------------|
-| `pairs.distance_threshold`               | `100`          | Pixel distance between centres to count as a pair                       |
+| `pairs.max_distance_ratio`               | `1.0`          | Max centre distance in person heights (scale-invariant) to count as a pair |
 | `detection.conf_person` / `conf_dog`     | `0.2` / `0.02` | Per-class confidence floor (dog is low on purpose, to see distant dogs) |
 | `video.max_duration_sec`                 | `180`          | Video analysis time limit (seconds)                                     |
 | `model.imgsz`                            | `1280`         | Model input size, must match the exported engine                        |

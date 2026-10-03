@@ -36,11 +36,11 @@ def test_track_kwargs_uses_lowest_threshold_and_config():
 
 def test_handle_pair_events_logs_and_saves(caplog):
     shots = FakeScreenshots()
-    events = [("start", ("p1", "d2"), 42.0, 0.0), ("end", ("p3", "d4"), None, 5.0)]
+    events = [("start", ("p1", "d2"), 0.42, 0.0), ("end", ("p3", "d4"), None, 5.0)]
     with caplog.at_level(logging.INFO, logger="tests"):
         handle_pair_events(events, object(), 1.5, "sfx", shots, LOGGER, log_suffix=", time=1.5s")
     assert shots.saved == [(1.5, "sfx")]
-    assert "Person with dog: p1 <-> d2, distance=42px, time=1.5s" in caplog.text
+    assert "Person with dog: p1 <-> d2, distance=0.42 person heights, time=1.5s" in caplog.text
     assert "Pair ended: p3 <-> d4, duration=5.0s, time=1.5s" in caplog.text
 
 

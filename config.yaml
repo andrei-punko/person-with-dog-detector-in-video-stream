@@ -23,10 +23,12 @@ detection:
   dog_inside_person_max_conf: 0.15
 
 pairs:
-  # A person and a dog count as "together" when the distance between their box centres is below
-  # this many pixels. The distance is in image pixels, so it depends on camera resolution and
-  # on how far the objects are from the camera.
-  distance_threshold: 100
+  # A person and a dog count as "together" when the distance between their box centres, divided
+  # by the height of the person's box, is below this value. Measuring in "person heights" instead
+  # of pixels makes the rule independent of camera resolution and of how far the pair is from
+  # the camera. 1.0 means the dog is within one person's height of the person's centre.
+  # Raise it to catch dogs on a longer leash, lower it to require them to be closer.
+  max_distance_ratio: 1.0
   # A pair is considered ended when it has not been seen for this many seconds. Keeps short
   # detection gaps from splitting one encounter into several events.
   lost_timeout_sec: 2.0

@@ -73,18 +73,23 @@ def collect_detections(boxes, conf_thresholds, dog_inside_person_max_conf):
     return persons, dogs
 
 
-def find_pairs(persons, dogs, distance_threshold):
-    """Return {(person_key, dog_key): distance} for every person/dog pair closer than the threshold.
+def find_pairs(persons, dogs, max_distance_ratio):
+    """Return {(person_key, dog_key): distance} for every person/dog pair that is close enough.
+
+    The distance is scale-invariant: the pixel distance between the box centres divided by the
+    height of the person box, i.e. measured in "person heights". A pair is close enough when that
+    is below max_distance_ratio, so a far-away pair is judged the same as a near one.
 
     Keys are tracker IDs ("p3", "d7"); a detection without an ID falls back to its list index ("p#0").
     """
     pairs = {}
     for i, p in enumerate(persons):
         pkey = f"p{p['id']}" if p["id"] is not None else f"p#{i}"
+        person_height = max(p["coords"][3] - p["coords"][1], 1)
         for j, d in enumerate(dogs):
             dkey = f"d{d['id']}" if d["id"] is not None else f"d#{j}"
-            distance = math.dist(p["center"], d["center"])
-            if distance < distance_threshold:
+            distance = math.dist(p["center"], d["center"]) / person_height
+            if distance < max_distance_ratio:
                 pairs[(pkey, dkey)] = distance
     return pairs
 
