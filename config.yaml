@@ -39,7 +39,7 @@ screenshots:
   # Hard lower bound between two saved screenshots, in seconds, regardless of events.
   min_interval_sec: 0.33
   # JPEG quality, 1-100. Lower means smaller files (95 is roughly 4x larger than 65).
-  jpeg_quality: 65
+  jpeg_quality: 75
   # Frames wider than this are downscaled (aspect ratio kept) before saving. 0 disables scaling.
   max_width: 1920
 
