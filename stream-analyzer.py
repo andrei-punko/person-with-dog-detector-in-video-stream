@@ -191,9 +191,6 @@ while True:
             dogs.append((dcx, dcy))
             draw_bounding_box(frame, dx1, dy1, dx2, dy2, 16, d["conf"])
 
-    if persons or dogs:
-        logger.info(f"Detected: {len(persons)} persons, {len(dogs)} dogs")
-
     # --- Distance check ---
     for i, (px, py) in enumerate(persons):
         for j, (dx, dy) in enumerate(dogs):

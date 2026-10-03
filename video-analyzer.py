@@ -112,7 +112,6 @@ for frame_idx, result in enumerate(results):
                 persons.append((cx, cy))
             elif cls == 16:
                 dogs.append((cx, cy))
-                logger.info(f"  [frame {frame_idx}] Dog detected! conf={conf:.2f}, center=({cx:.0f}, {cy:.0f})")
             draw_bounding_box(frame, x1, y1, x2, y2, cls, conf)
 
     # --- Distance check ---
