@@ -37,7 +37,7 @@ DISTANCE_THRESHOLD = 100
 # A pair is considered ended after this many seconds without being seen;
 # while a pair persists, another screenshot is saved every PAIR_SNAPSHOT_INTERVAL_SEC
 PAIR_LOST_TIMEOUT_SEC = 2.0
-PAIR_SNAPSHOT_INTERVAL_SEC = 5.0
+PAIR_SNAPSHOT_INTERVAL_SEC = 1.0
 
 # Per-class confidence thresholds (COCO class 0 = person, 16 = dog)
 CONF_THRESHOLDS = {
