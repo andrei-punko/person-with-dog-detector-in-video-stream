@@ -7,8 +7,15 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-# On Windows use Scripts/activate; on Linux/macOS use bin/activate
-source venv-gpu/Scripts/activate
+# On Windows (Git Bash) use Scripts/activate; on Linux/macOS use bin/activate
+if [ -f venv-gpu/Scripts/activate ]; then
+    source venv-gpu/Scripts/activate
+elif [ -f venv-gpu/bin/activate ]; then
+    source venv-gpu/bin/activate
+else
+    echo "Error: virtual environment venv-gpu not found"
+    exit 1
+fi
 
 set -a
 source .env
