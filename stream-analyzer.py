@@ -53,6 +53,46 @@ CONF_THRESHOLDS = {
 
 SCREENSHOTS_DIR = "screenshots"
 
+# Переподключение к потоку: таймаут подключения/чтения и пауза между попытками (сек)
+STREAM_TIMEOUT_MS = 5000
+RECONNECT_MIN_DELAY = 1
+RECONNECT_MAX_DELAY = 30
+
+
+def open_stream(url):
+    """Открывает поток с таймаутами, чтобы зависшее соединение не блокировало чтение. None при неудаче."""
+    cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG, [
+        cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, STREAM_TIMEOUT_MS,
+        cv2.CAP_PROP_READ_TIMEOUT_MSEC, STREAM_TIMEOUT_MS,
+    ])
+    if not cap.isOpened():
+        cap.release()
+        return None
+    return cap
+
+
+def wait_or_quit(seconds):
+    """Ждет seconds секунд. Возвращает True, если пользователь нажал 'q'."""
+    end = time.time() + seconds
+    while time.time() < end:
+        if cv2.waitKey(100) & 0xFF == ord('q'):
+            return True
+    return False
+
+
+def connect(url, url_safe):
+    """Подключается к потоку, повторяя попытки с растущей паузой. None, если пользователь нажал 'q'."""
+    delay = RECONNECT_MIN_DELAY
+    while True:
+        cap = open_stream(url)
+        if cap is not None:
+            return cap
+        logger.warning(f"Could not connect to stream {url_safe}, retrying in {delay}s")
+        if wait_or_quit(delay):
+            return None
+        delay = min(delay * 2, RECONNECT_MAX_DELAY)
+
+
 if len(sys.argv) < 2:
     print("Usage: python stream-analyzer.py <stream_url>")
     sys.exit(1)
@@ -62,10 +102,10 @@ STREAM_URL_SAFE = redact_url(STREAM_URL)
 screenshots = ScreenshotSaver(SCREENSHOTS_DIR, source_label(STREAM_URL))
 logger.info(f"Stream source: {STREAM_URL_SAFE}")
 
-cap = cv2.VideoCapture(STREAM_URL)
-if not cap.isOpened():
-    logger.error(f"Could not connect to stream {STREAM_URL_SAFE}")
-    sys.exit(1)
+cap = connect(STREAM_URL, STREAM_URL_SAFE)
+if cap is None:
+    logger.info("Analysis stopped by user.")
+    sys.exit(0)
 
 fps = cap.get(cv2.CAP_PROP_FPS)
 VIDEO_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -79,8 +119,17 @@ logger.info("Analysis started. Press 'Q' in the video window to stop.")
 while True:
     ret, frame = cap.read()
     if not ret:
-        logger.info("Stream ended or frame read error.")
-        break
+        logger.warning("Stream lost or frame read error, reconnecting...")
+        cap.release()
+        if wait_or_quit(RECONNECT_MIN_DELAY):
+            cap = None
+        else:
+            cap = connect(STREAM_URL, STREAM_URL_SAFE)
+        if cap is None:
+            logger.info("Analysis stopped by user.")
+            break
+        logger.info("Stream reconnected.")
+        continue
 
     time_sec = time.time()
 
@@ -190,5 +239,6 @@ while True:
         logger.info("Analysis stopped by user.")
         break
 
-cap.release()
+if cap is not None:
+    cap.release()
 cv2.destroyAllWindows()
