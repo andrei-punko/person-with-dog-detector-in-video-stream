@@ -5,41 +5,41 @@ import os
 import sys
 import time
 
-# Загружаем предобученную модель YOLO (она уже знает классы 0: person, 16: dog)
+# Load pretrained YOLO model (knows classes: 0=person, 16=dog)
 model = YOLO("models/yolo26l.pt")
 
-# Пороговое расстояние в реальных пикселях видео
+# Distance threshold in real video pixels
 DISTANCE_THRESHOLD = 100
 
-# Папка для скриншотов
+# Screenshots folder
 SCREENSHOTS_DIR = "screenshots"
 
-# Получаем источник потока из аргументов командной строки
+# Get stream source from command line arguments
 if len(sys.argv) < 2:
-    print("Использование: python stream-analyzer.py <stream_url>")
-    print("Примеры:")
+    print("Usage: python stream-analyzer.py <stream_url>")
+    print("Examples:")
     print("  python stream-analyzer.py rtsp://login:password@192.168.1.80:554/stream1")
     print("  python stream-analyzer.py http://192.168.1.100:8080/video")
-    print("  python stream-analyzer.py 0  # веб-камера")
+    print("  python stream-analyzer.py 0  # webcam")
     sys.exit(1)
 
 STREAM_URL = sys.argv[1]
-# Если аргумент — число, значит это индекс камеры
+# If argument is a number, it's a camera index
 if STREAM_URL.isdigit():
     STREAM_URL = int(STREAM_URL)
 
-print(f"Источник потока: {STREAM_URL}")
+print(f"Stream source: {STREAM_URL}")
 
-# Подключаемся к потоку
+# Connect to stream
 cap = cv2.VideoCapture(STREAM_URL)
 if not cap.isOpened():
-    print(f"Ошибка: не удалось подключиться к потоку {STREAM_URL}")
+    print(f"Error: could not connect to stream {STREAM_URL}")
     sys.exit(1)
 
-# Получаем параметры потока
+# Get stream parameters
 fps = cap.get(cv2.CAP_PROP_FPS)
 if fps <= 0:
-    fps = 30.0  # значение по умолчанию для потоков без FPS
+    fps = 30.0  # default for streams without FPS
 VIDEO_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 VIDEO_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
@@ -47,22 +47,22 @@ if VIDEO_WIDTH <= 0 or VIDEO_HEIGHT <= 0:
     VIDEO_WIDTH = 1920
     VIDEO_HEIGHT = 1080
 
-print(f"FPS: {fps}, Разрешение: {VIDEO_WIDTH}x{VIDEO_HEIGHT}")
+print(f"FPS: {fps}, Resolution: {VIDEO_WIDTH}x{VIDEO_HEIGHT}")
 
-# Обрабатывать ~10 кадров в секунду независимо от FPS потока
+# Process ~10 frames per second regardless of stream FPS
 frame_skip = max(1, int(fps / 10))
-print(f"Frame skip: каждый {frame_skip}-й кадр (~10 кадров/сек)")
+print(f"Frame skip: every {frame_skip} frames (~10 fps)")
 
-# Размер входного кадра для модели (не больше 1920, кратен 32)
+# Input frame size for the model (max 1920, multiple of 32)
 IMGSZ = min(VIDEO_WIDTH, VIDEO_HEIGHT, 1920)
 IMGSZ = (IMGSZ // 32) * 32
 
 print(f"IMGSZ: {IMGSZ}")
 
-# Создаём папку для скриншотов
+# Create screenshots folder
 os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
-print(f"Скриншоты будут сохранены в: {SCREENSHOTS_DIR}/")
-print("Анализ запущен. Остановка — Ctrl+C")
+print(f"Screenshots will be saved to: {SCREENSHOTS_DIR}/")
+print("Analysis started. Stop with Ctrl+C")
 
 last_screenshot_time = -1.0
 frame_idx = 0
@@ -70,17 +70,17 @@ frame_idx = 0
 while True:
     ret, frame = cap.read()
     if not ret:
-        print("Поток завершён или ошибка чтения кадра.")
+        print("Stream ended or frame read error.")
         break
 
     if frame_idx % frame_skip != 0:
         frame_idx += 1
         continue
 
-    # Текущее системное время
+    # Current system time
     time_sec = time.time()
 
-    # Запускаем трекинг на текущем кадре
+    # Run tracking on current frame
     results = model.track(
         source=frame,
         show=False,
@@ -144,7 +144,7 @@ while True:
 
     frame_idx += 1
 
-    # Масштабируем окно, чтобы влезло в FHD (1920x1080)
+    # Scale window to fit FHD (1920x1080)
     max_width = 1920
     max_height = 1080
     h, w = frame.shape[:2]

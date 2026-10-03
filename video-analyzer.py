@@ -4,31 +4,31 @@ import math
 import os
 import sys
 
-# Загружаем предобученную модель YOLO (она уже знает классы 0: person, 16: dog)
+# Load pretrained YOLO model (knows classes: 0=person, 16=dog)
 model = YOLO("models/yolo26l.pt")
 
-# Пороговое расстояние в реальных пикселях видео
+# Distance threshold in real video pixels
 DISTANCE_THRESHOLD = 100
 
-# Разрешение видео определяется из самого файла
+# Video resolution is determined from the file itself
 
-# Размер входного кадра для модели (вычисляется из разрешения видео)
+# Input frame size for the model (calculated from video resolution)
 
-# Ограничение анализа по времени (секунды)
+# Analysis time limit (seconds)
 MAX_DURATION_SEC = 3*60
 
-# Папка для скриншотов
+# Screenshots folder
 SCREENSHOTS_DIR = "screenshots"
 
-# Получаем имя файла из аргументов командной строки
+# Get file name from command line arguments
 if len(sys.argv) < 2:
-    print("Использование: python video-analyzer.py <video_file>")
+    print("Usage: python video-analyzer.py <video_file>")
     sys.exit(1)
 
 VIDEO_FILE = sys.argv[1]
-print(f"Анализируемый файл: {VIDEO_FILE}")
+print(f"Analyzing file: {VIDEO_FILE}")
 
-# Получаем FPS видео для подсчёта количества кадров
+# Get FPS from video for frame count calculation
 cap = cv2.VideoCapture(VIDEO_FILE)
 fps = cap.get(cv2.CAP_PROP_FPS)
 total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -36,20 +36,20 @@ VIDEO_WIDTH = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 VIDEO_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 cap.release()
 
-# Размер входного кадра для модели (не больше 1920, кратен 32)
+# Input frame size for the model (max 1920, multiple of 32)
 IMGSZ = min(VIDEO_WIDTH, VIDEO_HEIGHT, 1920)
 IMGSZ = (IMGSZ // 32) * 32
 max_frames = min(int(fps * MAX_DURATION_SEC), total_frames)
 
-print(f"FPS: {fps}, Всего кадров: {total_frames}, Анализируем: {max_frames} кадров (~{MAX_DURATION_SEC} сек)")
+print(f"FPS: {fps}, Total frames: {total_frames}, Analyzing: {max_frames} frames (~{MAX_DURATION_SEC} sec)")
 
-# Обрабатывать ~10 кадров в секунду независимо от FPS видео
+# Process ~10 frames per second regardless of video FPS
 frame_skip = max(1, int(fps / 10))
-print(f"Frame skip: каждый {frame_skip}-й кадр (~10 кадров/сек)")
+print(f"Frame skip: every {frame_skip} frames (~10 fps)")
 
-# Создаём папку для скриншотов
+# Create screenshots folder
 os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
-print(f"Скриншоты будут сохранены в: {SCREENSHOTS_DIR}/")
+print(f"Screenshots will be saved to: {SCREENSHOTS_DIR}/")
 
 # Запуск анализа видеопотока с пониженным порогом уверенности
 results = model.track(
@@ -69,10 +69,10 @@ for frame_idx, result in enumerate(results):
         continue
 
     if frame_idx >= max_frames:
-        print(f"Достигнут лимит {MAX_DURATION_SEC} сек — остановка.")
+        print(f"Limit reached: {MAX_DURATION_SEC} sec — stopping.")
         break
 
-    # 1. Получаем координаты всех людей и собак в кадре
+    # 1. Get coordinates of all persons and dogs in the frame
     boxes = result.boxes
     persons = []
     dogs = []
@@ -87,9 +87,9 @@ for frame_idx, result in enumerate(results):
             persons.append((cx, cy))
         elif cls == 16:
             dogs.append((cx, cy))
-            print(f"  [кадр {frame_idx}] Собака обнаружена! conf={conf:.2f}, центр=({cx:.0f}, {cy:.0f})")
+            print(f"  [frame {frame_idx}] Dog detected! conf={conf:.2f}, center=({cx:.0f}, {cy:.0f})")
 
-    # 2. Считаем расстояние между ними (с пересчётом в реальные пиксели)
+    # 2. Calculate distances between them (with conversion to real pixels)
     scale = VIDEO_WIDTH / IMGSZ
     for i, (px, py) in enumerate(persons):
         for j, (dx, dy) in enumerate(dogs):
@@ -97,17 +97,17 @@ for frame_idx, result in enumerate(results):
             distance_real = distance_model * scale
             print(f"distance_real={distance_real}")
 
-            # 3. Если расстояние меньше N пикселей -> фиксируем "Человек с собакой"
+            # 3. If distance is less than N pixels -> log "Person with dog"
             if distance_real < DISTANCE_THRESHOLD:
                 time_sec = frame_idx / fps
-                print(f"Человек с собакой: person#{i} <-> dog#{j}, расстояние = {distance_real:.0f}px, время = {time_sec:.1f} сек")
+                print(f"Person with dog: person#{i} <-> dog#{j}, distance = {distance_real:.0f}px, time = {time_sec:.1f} sec")
 
-                # Сохраняем скриншот (не чаще одного раза в секунду)
+                # Save screenshot (no more than once per second)
                 if time_sec - last_screenshot_time >= 1.0:
                     video_name = os.path.splitext(os.path.basename(VIDEO_FILE))[0]
                     screenshot_path = os.path.join(SCREENSHOTS_DIR, f"{video_name}_{time_sec:.1f}s.jpg")
                     cv2.imwrite(screenshot_path, result.orig_img)
                     last_screenshot_time = time_sec
-                    print(f"  Скриншот сохранён: {screenshot_path}")
+                    print(f"  Screenshot saved: {screenshot_path}")
 
 cv2.destroyAllWindows()
