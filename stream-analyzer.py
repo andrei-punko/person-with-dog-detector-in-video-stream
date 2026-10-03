@@ -171,7 +171,8 @@ while True:
             if distance_real < DISTANCE_THRESHOLD:
                 logger.info(f"Person with dog: person#{i} <-> dog#{j}, distance = {distance_real:.0f}px")
 
-                screenshots.save(frame, time_sec, time.strftime('%Y%m%d_%H%M%S', time.localtime(time_sec)), logger)
+                timestamp = f"{time.strftime('%Y%m%d_%H%M%S', time.localtime(time_sec))}_{int(time_sec * 1000) % 1000:03d}"
+                screenshots.save(frame, time_sec, timestamp, logger)
 
     # Изменение размера окна для вывода на экран (масштабируем под FHD)
     max_width = 1920
