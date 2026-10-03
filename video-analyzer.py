@@ -4,6 +4,10 @@ import math
 import os
 import sys
 import numpy as np
+from common import ScreenshotSaver, redact_url, setup_logging, source_label
+
+LOG_FILE = "video-analyzer.log"
+logger = setup_logging(LOG_FILE)
 
 # --- НАСТРОЙКИ ---
 # Путь к оптимизированной TensorRT модели
@@ -47,12 +51,13 @@ if len(sys.argv) < 2:
     sys.exit(1)
 
 VIDEO_FILE = sys.argv[1]
-print(f"Analyzing file: {VIDEO_FILE}")
+VIDEO_FILE_SAFE = redact_url(VIDEO_FILE)
+logger.info(f"Analyzing file: {VIDEO_FILE_SAFE}")
 
 # Получаем параметры видеофайла
 cap = cv2.VideoCapture(VIDEO_FILE)
 if not cap.isOpened():
-    print(f"Error: Could not open video file {VIDEO_FILE}")
+    logger.error(f"Could not open video file {VIDEO_FILE_SAFE}")
     sys.exit(1)
 
 fps = cap.get(cv2.CAP_PROP_FPS)
@@ -62,13 +67,13 @@ VIDEO_HEIGHT = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 cap.release()
 
 max_frames = min(int(fps * MAX_DURATION_SEC), total_frames)
-print(f"FPS: {fps}, Total frames: {total_frames}, Analyzing: {max_frames} frames (~{MAX_DURATION_SEC} sec)")
+logger.info(f"FPS: {fps}, Total frames: {total_frames}, Analyzing: {max_frames} frames (~{MAX_DURATION_SEC} sec)")
 
-os.makedirs(SCREENSHOTS_DIR, exist_ok=True)
-print(f"Screenshots will be saved to: {SCREENSHOTS_DIR}/")
+screenshots = ScreenshotSaver(SCREENSHOTS_DIR, source_label(VIDEO_FILE))
+logger.info(f"Screenshots will be saved to: {SCREENSHOTS_DIR}/")
 
 # --- ИНИЦИАЛИЗАЦИЯ И ПРОГРЕВ МОДЕЛИ ---
-print("Warming up TensorRT model...")
+logger.info("Warming up TensorRT model...")
 model = YOLO(MODEL_PATH)
 model.track(source=np.zeros((640, 640, 3), dtype=np.uint8), device='cuda:0', verbose=False)
 
@@ -85,12 +90,12 @@ results = model.track(
     persist=True
 )
 
-last_screenshot_time = -1.0
+logger.info("Analysis started. Press 'Q' in the video window to stop.")
 
 # --- ОСНОВНОЙ ЦИКЛ ОБРАБОТКИ ---
 for frame_idx, result in enumerate(results):
     if frame_idx >= max_frames:
-        print(f"Limit reached: {MAX_DURATION_SEC} sec — stopping.")
+        logger.info(f"Limit reached: {MAX_DURATION_SEC} sec — stopping.")
         break
 
     # Берем оригинальный кадр для отрисовки рамок
@@ -120,7 +125,7 @@ for frame_idx, result in enumerate(results):
                 persons.append((cx, cy))
             elif cls == 16:
                 dogs.append((cx, cy))
-                print(f"  [frame {frame_idx}] Dog detected! conf={conf:.2f}, center=({cx:.0f}, {cy:.0f})")
+                logger.info(f"  [frame {frame_idx}] Dog detected! conf={conf:.2f}, center=({cx:.0f}, {cy:.0f})")
 
             # Вызов общего метода отрисовки
             draw_bounding_box(frame, x1, y1, x2, y2, cls, conf)
@@ -134,16 +139,10 @@ for frame_idx, result in enumerate(results):
             # Если расстояние меньше порога -> фиксируем событие
             if distance_real < DISTANCE_THRESHOLD:
                 time_sec = frame_idx / fps
-                print(f"Person with dog: person#{i} <-> dog#{j}, distance = {distance_real:.0f}px, time = {time_sec:.1f} sec")
+                logger.info(f"Person with dog: person#{i} <-> dog#{j}, distance = {distance_real:.0f}px, time = {time_sec:.1f} sec")
 
-                # Сохранение скриншота (не чаще 3 раз в секунду)
-                if time_sec - last_screenshot_time >= 0.33:
-                    video_name = os.path.splitext(os.path.basename(VIDEO_FILE))[0]
-                    screenshot_path = os.path.join(SCREENSHOTS_DIR, f"{video_name}_{time_sec:.1f}s.jpg")
-                    # Сохраняем кадр уже с нарисованными рамками
-                    cv2.imwrite(screenshot_path, frame)
-                    last_screenshot_time = time_sec
-                    print(f"  Screenshot saved: {screenshot_path}")
+                # Сохраняем кадр уже с нарисованными рамками
+                screenshots.save(frame, time_sec, f"{time_sec:.1f}s", logger)
 
     # --- ВИЗУАЛИЗАЦИЯ (ОКНО) ---
     # Масштабируем картинку, если видео в 2K, чтобы оно аккуратно влезало в FHD монитор
@@ -160,8 +159,8 @@ for frame_idx, result in enumerate(results):
 
     # Кнопка 'q' закроет видео досрочно
     if cv2.waitKey(1) & 0xFF == ord('q'):
-        print("Analysis interrupted by user.")
+        logger.info("Analysis interrupted by user.")
         break
 
 cv2.destroyAllWindows()
-print("Analysis finished.")
+logger.info("Analysis finished.")
