@@ -4,18 +4,10 @@ import cv2
 import math
 import time
 import numpy as np
-from common import ScreenshotSaver, ThreadedVideoCapture, redact_url, setup_logging, source_label
+from common import ScreenshotSaver, ThreadedVideoCapture, collect_detections, draw_bounding_box, redact_url, setup_logging, source_label
 
 LOG_FILE = "stream-analyzer.log"
 logger = setup_logging(LOG_FILE)
-
-
-def draw_bounding_box(frame, x1, y1, x2, y2, cls, conf):
-    """Draw a bounding box and class label on the frame."""
-    label = "person" if cls == 0 else "dog"
-    color = (0, 255, 0) if cls == 0 else (0, 0, 255)
-    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-    cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
 
 def log_time(res):
@@ -103,51 +95,18 @@ try:
         result = results[0]
         # Uncomment to log per-frame inference timing:
         # log_time(result)
-        boxes = result.boxes
-
-        # --- Collect detections ---
-        raw_persons = []
-        raw_dogs = []
-
-        if boxes is not None and len(boxes) > 0:
-            for box in boxes:
-                cls = int(box.cls)
-                conf = float(box.conf)
-                if conf < CONF_THRESHOLDS.get(cls, 0.25):
-                    continue
-                x1, y1, x2, y2 = box.xyxy[0].int().tolist()
-                if cls == 0:
-                    raw_persons.append({"coords": (x1, y1, x2, y2), "conf": conf})
-                elif cls == 16:
-                    raw_dogs.append({"coords": (x1, y1, x2, y2), "conf": conf})
-
-        # --- False-positive filter ---
-        # Drop a dog detection whose centre falls inside a person box and whose
-        # confidence is below 0.15; this catches the common "hood as dog" mistake.
-        persons = []
-        dogs = []
-
-        for p in raw_persons:
-            x1, y1, x2, y2 = p["coords"]
-            persons.append(((x1 + x2) / 2, (y1 + y2) / 2))
-            draw_bounding_box(frame, x1, y1, x2, y2, 0, p["conf"])
-
-        for d in raw_dogs:
-            dx1, dy1, dx2, dy2 = d["coords"]
-            dcx = (dx1 + dx2) / 2
-            dcy = (dy1 + dy2) / 2
-            is_false_dog = any(
-                px1 <= dcx <= px2 and py1 <= dcy <= py2 and d["conf"] < 0.15
-                for p in raw_persons
-                for px1, py1, px2, py2 in [p["coords"]]
-            )
-            if not is_false_dog:
-                dogs.append((dcx, dcy))
-                draw_bounding_box(frame, dx1, dy1, dx2, dy2, 16, d["conf"])
+        # --- Collect detections (with false-positive filter) ---
+        persons, dogs = collect_detections(result.boxes, CONF_THRESHOLDS)
+        for p in persons:
+            draw_bounding_box(frame, *p["coords"], 0, p["conf"])
+        for d in dogs:
+            draw_bounding_box(frame, *d["coords"], 16, d["conf"])
 
         # --- Distance check ---
-        for i, (px, py) in enumerate(persons):
-            for j, (dx, dy) in enumerate(dogs):
+        for i, p in enumerate(persons):
+            px, py = p["center"]
+            for j, d in enumerate(dogs):
+                dx, dy = d["center"]
                 distance = math.sqrt((px - dx) ** 2 + (py - dy) ** 2)
                 if distance < DISTANCE_THRESHOLD:
                     logger.info(f"Person with dog: person#{i} <-> dog#{j}, distance={distance:.0f}px")

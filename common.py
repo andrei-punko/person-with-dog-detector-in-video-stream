@@ -136,3 +136,49 @@ class ThreadedVideoCapture:
     def stop(self):
         self._stop.set()
         self._thread.join(timeout=self.timeout_ms / 1000 + 1)
+
+
+# A dog detection below this confidence whose centre lies inside a person box is
+# treated as a false positive (the common "hood as dog" mistake).
+DOG_INSIDE_PERSON_MAX_CONF = 0.15
+
+
+def draw_bounding_box(frame, x1, y1, x2, y2, cls, conf):
+    """Draw a bounding box and class label on the frame (COCO class 0 = person, otherwise dog)."""
+    label = "person" if cls == 0 else "dog"
+    color = (0, 255, 0) if cls == 0 else (0, 0, 255)
+    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+    cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+
+
+def collect_detections(boxes, conf_thresholds, default_conf=0.25):
+    """Split YOLO boxes into persons and dogs, applying per-class thresholds and the false-positive filter.
+
+    Returns two lists of {"coords": (x1, y1, x2, y2), "center": (cx, cy), "conf": float}.
+    """
+    persons = []
+    dogs = []
+    if boxes is None or len(boxes) == 0:
+        return persons, dogs
+
+    for box in boxes:
+        cls = int(box.cls)
+        conf = float(box.conf)
+        if conf < conf_thresholds.get(cls, default_conf):
+            continue
+        x1, y1, x2, y2 = box.xyxy[0].int().tolist()
+        det = {"coords": (x1, y1, x2, y2), "center": ((x1 + x2) / 2, (y1 + y2) / 2), "conf": conf}
+        if cls == 0:
+            persons.append(det)
+        elif cls == 16:
+            dogs.append(det)
+
+    def inside_person(dog):
+        cx, cy = dog["center"]
+        return any(
+            px1 <= cx <= px2 and py1 <= cy <= py2
+            for px1, py1, px2, py2 in (p["coords"] for p in persons)
+        )
+
+    dogs = [d for d in dogs if not (d["conf"] < DOG_INSIDE_PERSON_MAX_CONF and inside_person(d))]
+    return persons, dogs

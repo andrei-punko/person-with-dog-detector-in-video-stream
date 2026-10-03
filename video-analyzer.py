@@ -2,9 +2,9 @@ from ultralytics import YOLO
 import argparse
 import cv2
 import math
-import os
+import sys
 import numpy as np
-from common import ScreenshotSaver, redact_url, setup_logging, source_label
+from common import ScreenshotSaver, collect_detections, draw_bounding_box, redact_url, setup_logging, source_label
 
 LOG_FILE = "video-analyzer.log"
 logger = setup_logging(LOG_FILE)
@@ -30,14 +30,6 @@ SCREENSHOTS_DIR = "screenshots"
 
 # Model input size; must match the size used when exporting the .engine file
 IMGSZ = 1280
-
-
-def draw_bounding_box(frame, x1, y1, x2, y2, cls, conf):
-    """Draw a bounding box and class label on the frame."""
-    label = "person" if cls == 0 else "dog"
-    color = (0, 255, 0) if cls == 0 else (0, 0, 255)
-    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-    cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
 
 # --- Entry point ---
@@ -97,28 +89,18 @@ for frame_idx, result in enumerate(results):
     boxes = result.boxes
     time_sec = frame_idx / fps
 
-    persons = []
-    dogs = []
-
-    # --- Collect detections ---
-    if boxes is not None and len(boxes) > 0:
-        for box in boxes:
-            cls = int(box.cls)
-            conf = float(box.conf)
-            if conf < CONF_THRESHOLDS.get(cls, MIN_CONF):
-                continue
-            x1, y1, x2, y2 = box.xyxy[0].int().tolist()
-            cx = (x1 + x2) / 2
-            cy = (y1 + y2) / 2
-            if cls == 0:
-                persons.append((cx, cy))
-            elif cls == 16:
-                dogs.append((cx, cy))
-            draw_bounding_box(frame, x1, y1, x2, y2, cls, conf)
+    # --- Collect detections (with false-positive filter) ---
+    persons, dogs = collect_detections(boxes, CONF_THRESHOLDS, MIN_CONF)
+    for p in persons:
+        draw_bounding_box(frame, *p["coords"], 0, p["conf"])
+    for d in dogs:
+        draw_bounding_box(frame, *d["coords"], 16, d["conf"])
 
     # --- Distance check ---
-    for i, (px, py) in enumerate(persons):
-        for j, (dx, dy) in enumerate(dogs):
+    for i, p in enumerate(persons):
+        px, py = p["center"]
+        for j, d in enumerate(dogs):
+            dx, dy = d["center"]
             distance = math.sqrt((px - dx) ** 2 + (py - dy) ** 2)
             if distance < DISTANCE_THRESHOLD:
                 logger.info(f"Person with dog: person#{i} <-> dog#{j}, distance={distance:.0f}px, time={time_sec:.1f}s")
