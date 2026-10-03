@@ -1,110 +1,157 @@
 # Person Dog Detector
 
-Детекция людей и собак на видео с помощью YOLO. При обнаружении человека и собаки на расстоянии меньше заданного порога — сохраняет скриншот в папку `screenshots/`.
+Detects people and dogs in an RTSP stream or a video file using YOLO + TensorRT.  
+When a person and a dog are found closer than a configurable pixel threshold, a screenshot is saved to `screenshots/`.
 
-## Установка
+## Requirements
 
-### 1. Клонируйте репозиторий
+- Windows or Linux
+- NVIDIA GPU with CUDA (tested with CUDA 12.1)
+- Python 3.12
+- TensorRT (installed as part of `requirements.txt`)
+
+## Setup
+
+### 1. Clone the repository
 
 ```bash
-git clone <url-репозитория>
+git clone <repo-url>
 cd person-dog-detector
 ```
 
-### 2. Создайте виртуальное окружение (рекомендуется)
+### 2. Create a virtual environment
 
 ```bash
 py -3.12 -m venv venv-gpu
 ```
 
-Активируйте виртуальное окружение:
+Activate it:
 
-- **Windows:**
-  ```bash
-  venv-gpu/Scripts/activate
-  ```
-- **Linux / macOS:**
-  ```bash
-  source venv-gpu/bin/activate
-  ```
+- **Windows:** `venv-gpu\Scripts\activate`
+- **Linux / macOS:** `source venv-gpu/bin/activate`
 
-### 3. Установите зависимости
+### 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
-```
-
-### 4. Установите PyTorch с поддержкой CUDA (для GPU)
-
-```bash
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
 ```
 
-### 5. Скачайте модель
+### 4. Download the YOLO model
 
-Поместите файл модели `yolo26l.pt` в папку `models/`:
+Place `yolo26l.pt` in the `models/` folder:
+
+```
+models/
+└── yolo26l.pt
+```
+
+### 5. Export to TensorRT engine
+
+Run once to produce `models/yolo26l.engine` (requires a connected GPU):
+
+```bash
+python convert-model-to-engine.py
+```
+
+### 6. Configure credentials
+
+Copy `.env-sample` to `.env` and fill in your RTSP URL:
+
+```bash
+cp .env-sample .env
+```
+
+## Usage
+
+### Analyse an RTSP stream
+
+```bash
+# Using the launcher (reads RTSP_URL from .env):
+bash start-stream-analyzer.sh
+
+# Or directly:
+python stream-analyzer.py rtsp://user:password@192.168.1.80:554/stream1
+```
+
+The script reconnects automatically if the stream drops. Press **Q** in the video window to stop.
+
+### Analyse a video file
+
+```bash
+# Using the launcher (pass the file as an argument):
+start-video-analyzer.bat videos\01.mp4
+
+# Or directly:
+python video-analyzer.py videos/01.mp4
+```
+
+Analysis stops after `MAX_DURATION_SEC` seconds (default: 3 minutes) or when the file ends.
+
+## How it works
+
+1. Frames are passed through YOLO tracking (TensorRT engine, FP16).
+2. Detections are filtered by per-class confidence thresholds.
+3. A geometric filter drops low-confidence dog detections whose centre falls inside a person box (common false positive: person wearing a hood).
+4. The Euclidean distance between each person centre and each dog centre is compared against `DISTANCE_THRESHOLD`.
+5. When a pair is closer than the threshold, an event is logged and a screenshot is saved (at most 3 per second for streams, once per 0.33 s for video).
+
+## Settings
+
+All constants are at the top of each script.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `DISTANCE_THRESHOLD` | `100` | Pixel distance between centres to trigger an event |
+| `CONF_THRESHOLDS` | `{person: 0.2, dog: 0.02}` | Per-class confidence floor |
+| `MAX_DURATION_SEC` | `180` | Video analysis time limit (seconds) |
+| `IMGSZ` | `1280` | Model input size — must match the exported engine |
+| `STREAM_TIMEOUT_MS` | `5000` | RTSP connect / read timeout (ms) |
+| `RECONNECT_MIN_DELAY` | `1` | Initial reconnect back-off (seconds) |
+| `RECONNECT_MAX_DELAY` | `30` | Maximum reconnect back-off (seconds) |
+
+## Project structure
 
 ```
 person-dog-detector/
 ├── models/
-│   └── yolo26l.pt
-```
-
-## Использование
-
-Запустите скрипт, передав путь к видеофайлу:
-
-```bash
-python video-analyzer.py <video_file>
-```
-
-Пример:
-
-```bash
-python video-analyzer.py 1790925533525_0.mp4
-```
-
-## Как это работает
-
-1. Скрипт загружает видео и определяет его параметры (FPS, разрешение, количество кадров)
-2. Модель YOLO детектирует людей (класс 0) и собак (класс 16) на каждом 2-м кадре
-3. Вычисляется расстояние между центрами bounding box каждого человека и каждой собаки
-4. Если расстояние меньше `DISTANCE_THRESHOLD` (100 пикселей) — фиксируется событие «Человек с собакой»
-5. Скриншот сохраняется не чаще одного раза в секунду
-
-## Параметры
-
-| Параметр | Значение | Описание |
-|----------|----------|----------|
-| `DISTANCE_THRESHOLD` | 100 | Пороговое расстояние в пикселях |
-| `MAX_DURATION_SEC` | 180 | Ограничение анализа по времени (секунды) |
-| `IMGSZ` | до 1920 | Размер входного кадра (кратен 32) |
-| `conf` | 0.01 | Порог уверенности модели |
-| `device` | `cuda:0` | Устройство обработки (GPU) |
-
-## Структура проекта
-
-```
-person-dog-detector/
-├── models/
-│   └── yolo26l.pt          # Модель YOLO
-├── screenshots/             # Папка для скриншотов (создаётся автоматически)
-├── video-analyzer.py        # Основной скрипт
-├── requirements.txt         # Зависимости
+│   ├── yolo26l.pt              # Source weights (download separately)
+│   └── yolo26l.engine          # TensorRT engine (generated by convert-model-to-engine.py)
+├── screenshots/                # Saved event frames (created automatically)
+├── common.py                   # Shared helpers: logging, URL redaction, ScreenshotSaver
+├── stream-analyzer.py          # RTSP stream analyser
+├── video-analyzer.py           # Video file analyser
+├── convert-model-to-engine.py  # One-time TensorRT export
+├── check-cuda.py               # Verify CUDA availability
+├── start-stream-analyzer.sh    # Linux/macOS launcher (reads .env)
+├── start-video-analyzer.bat    # Windows launcher
+├── requirements.txt
+├── .env-sample
 └── README.md
 ```
 
-## Формат скриншотов
+## Screenshot naming
 
-Имя файла: `<имя_видео>_<время>s.jpg`
+| Source | Example |
+|---|---|
+| Stream | `192_168_1_80_554_stream1_20261003_154356_123.jpg` |
+| Video file | `01_7.7s.jpg` |
 
-Пример: `1790925533525_0_3.2s.jpg`
+## Logs
 
-## Зависимости
+Each script writes to its own log file and to the console:
 
-| Пакет | Описание |
-|-------|----------|
-| `ultralytics` | Модель YOLO для детекции и трекинга объектов |
-| `opencv-python` | Работа с изображениями и видео |
-| `torch` | Фреймворк глубокого обучения |
-| `torchvision` | Дополнительные инструменты для PyTorch |
+| Script | Log file |
+|---|---|
+| `stream-analyzer.py` | `stream-analyzer.log` |
+| `video-analyzer.py` | `video-analyzer.log` |
+
+Both log files are git-ignored.
+
+## Verify CUDA
+
+```bash
+python check-cuda.py
+```
+
+Prints the PyTorch version and whether CUDA is available.

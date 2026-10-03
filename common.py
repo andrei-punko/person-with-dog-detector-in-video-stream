@@ -8,7 +8,7 @@ import cv2
 
 
 def setup_logging(log_file):
-    """Настраивает общий формат логов: запись в файл и вывод в консоль."""
+    """Configure logging to write to both a file and the console with a shared format."""
     logging.basicConfig(
         level=logging.INFO,
         format='[%(asctime)s] %(message)s',
@@ -22,7 +22,7 @@ def setup_logging(log_file):
 
 
 def redact_url(source):
-    """Возвращает источник без логина, пароля и query-параметров (безопасно для логов)."""
+    """Return the source string with login, password and query parameters removed, safe for logging."""
     parts = urlsplit(source)
     has_credentials = parts.username is not None or parts.password is not None
     if not has_credentials and not parts.query:
@@ -35,7 +35,7 @@ def redact_url(source):
 
 
 def source_label(source):
-    """Короткое имя источника для файлов: имя видео или хост/порт/путь потока, без учетных данных."""
+    """Return a short filesystem-safe label for a source: video basename or stream host/port/path."""
     if "://" in source:
         parts = urlsplit(source)
         raw = f"{parts.hostname or 'stream'}_{parts.port or ''}_{parts.path}"
@@ -45,7 +45,7 @@ def source_label(source):
 
 
 class ScreenshotSaver:
-    """Сохраняет кадры в <directory>/<label>_<suffix>.jpg, не чаще чем раз в min_interval секунд."""
+    """Save frames to <directory>/<label>_<suffix>.jpg, at most once per min_interval seconds."""
 
     def __init__(self, directory, label, min_interval=0.33):
         self.directory = directory
@@ -55,7 +55,7 @@ class ScreenshotSaver:
         os.makedirs(directory, exist_ok=True)
 
     def save(self, frame, timestamp, suffix, logger):
-        """timestamp (в секундах) нужен для ограничения частоты, suffix — часть имени файла."""
+        """Save frame if min_interval has passed since the last save. Returns the path or None."""
         if self.last_time is not None and timestamp - self.last_time < self.min_interval:
             return None
         path = os.path.join(self.directory, f"{self.label}_{suffix}.jpg")

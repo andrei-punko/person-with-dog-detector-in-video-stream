@@ -7,6 +7,7 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
+# On Windows use Scripts/activate; on Linux/macOS use bin/activate
 source venv-gpu/Scripts/activate
 
 set -a
@@ -18,6 +19,6 @@ if [ -z "$RTSP_URL" ]; then
     exit 1
 fi
 
-# Print the URL without "rtsp://login:password@" so credentials don't leak to the console
-echo "Starting stream analysis: ${RTSP_URL#*@}"
+# Strip everything up to and including the last "@" so credentials don't appear in the console
+echo "Starting stream analysis: ${RTSP_URL##*@}"
 python stream-analyzer.py "$RTSP_URL"
