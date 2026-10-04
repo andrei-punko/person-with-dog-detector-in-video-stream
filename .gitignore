@@ -24,20 +24,12 @@ wheels/
 venv/
 venv-gpu/
 env/
-.env
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# Project specific
-screenshots/
-*.mp4
-*.avi
-*.mov
-*.mkv
 
 # Model files
 models/*.pt
@@ -49,5 +41,9 @@ models/*.engine
 Thumbs.db
 
 # Runtime
+screenshots/
+videos/
+dataset_raw/
+dataset/
 logs/
-*.log
+.env
