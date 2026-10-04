@@ -54,6 +54,8 @@ logging:
   backup_count: 3
 
 stream:
+  # RTSP transport protocol ("tcp" or "udp"). TCP is recommended for stability against packet loss.
+  rtsp_transport: tcp
   # Timeout in milliseconds for opening an RTSP connection and for reading a frame.
   timeout_ms: 5000
   # Reconnect back-off: start with min seconds, double after each failed attempt up to max.

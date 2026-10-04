@@ -37,12 +37,13 @@ class ThreadedVideoCapture:
     back-off on failure, and drops old frames so slow inference never builds up lag.
     """
 
-    def __init__(self, url, logger, timeout_ms, min_delay, max_delay):
+    def __init__(self, url, logger, timeout_ms, min_delay, max_delay, rtsp_transport="tcp"):
         self.url = url
         self.logger = logger
         self.timeout_ms = timeout_ms
         self.min_delay = min_delay
         self.max_delay = max_delay
+        self.rtsp_transport = rtsp_transport
         self._url_safe = redact_url(url)
         self._frame = None
         self._cond = threading.Condition()
@@ -53,13 +54,18 @@ class ThreadedVideoCapture:
     def from_config(cls, url, logger, cfg):
         """Create a capture from the "stream" section of the config."""
         s = cfg["stream"]
-        return cls(url, logger, s["timeout_ms"], s["reconnect_min_delay_sec"], s["reconnect_max_delay_sec"])
+        return cls(
+            url, logger, s["timeout_ms"], s["reconnect_min_delay_sec"], s["reconnect_max_delay_sec"],
+            s.get("rtsp_transport", "tcp")
+        )
 
     def start(self):
         self._thread.start()
         return self
 
     def _open(self):
+        if self.rtsp_transport:
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = f"rtsp_transport;{self.rtsp_transport}"
         cap = cv2.VideoCapture(self.url, cv2.CAP_FFMPEG, [
             cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, self.timeout_ms,
             cv2.CAP_PROP_READ_TIMEOUT_MSEC, self.timeout_ms,

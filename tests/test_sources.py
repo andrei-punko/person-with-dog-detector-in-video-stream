@@ -138,6 +138,14 @@ def test_capture_logs_do_not_contain_credentials(make_capture, caplog):
 
 
 def test_capture_from_config():
-    cfg = {"stream": {"timeout_ms": 1, "reconnect_min_delay_sec": 2, "reconnect_max_delay_sec": 3}}
-    cap = ThreadedVideoCapture.from_config("rtsp://h/s", LOGGER, cfg)
-    assert (cap.timeout_ms, cap.min_delay, cap.max_delay) == (1, 2, 3)
+    cfg = {
+        "stream": {
+            "timeout_ms": 1,
+            "reconnect_min_delay_sec": 2,
+            "reconnect_max_delay_sec": 3,
+            "rtsp_transport": "tcp",
+        }
+    }
+    cap = ThreadedVideoCapture.from_config("rtsp://host/s", LOGGER, cfg)
+    assert (cap.timeout_ms, cap.min_delay, cap.max_delay, cap.rtsp_transport) == (1, 2, 3, "tcp")
+

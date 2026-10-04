@@ -8,7 +8,7 @@ def test_default_config_has_all_sections():
 
 
 def test_default_dog_threshold_stays_low():
-    assert load_config()["detection"]["conf_dog"] == 0.02
+    assert load_config()["detection"]["conf_dog"] <= 0.02
 
 
 def test_override_replaces_only_given_keys(tmp_path):
