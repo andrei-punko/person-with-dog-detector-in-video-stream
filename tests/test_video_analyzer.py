@@ -71,12 +71,26 @@ def run_video_analyzer_test(python_bin, video_path, reference_path, cfg_file, sc
 def test_video_analyzer(tmp_path):
     """Test that video analyzer processes night and day videos and saves matching screenshots."""
     python_bin = get_gpu_python()
-    if not is_cuda_available_in_venv(python_bin):
-        pytest.skip(reason="CUDA GPU is not available in venv-gpu")
+    # if not is_cuda_available_in_venv(python_bin):
+    #     pytest.skip(reason="CUDA GPU is not available in venv-gpu")
 
     screenshots_dir = tmp_path / "screenshots"
     cfg_file = tmp_path / "override.yaml"
-    cfg_file.write_text(f"screenshots:\n  dir: {screenshots_dir.as_posix()}\n  jpeg_quality: 75\n  max_width: 1920\n", encoding="utf-8")
+
+    # Формируем базовый конфиг
+    config_content = (
+        f"screenshots:\n"
+        f"  dir: {screenshots_dir.as_posix()}\n"
+        f"  jpeg_quality: 75\n"
+        f"  max_width: 1920\n"
+    )
+
+    # Если мы в CI, не стираем, а ДОБАВЛЯЕМ настройки модели к тексту
+    if os.environ.get("GITHUB_ACTIONS") == "true":
+        config_content += f"model:\n  path: models/yolo26l.pt\n  device: cpu\n"
+
+    # Записываем всё один-единственный раз
+    cfg_file.write_text(config_content, encoding="utf-8")
 
     # Night video test
     night_video = os.path.join(os.path.dirname(__file__), "fixtures", "test_video_night.mp4")
