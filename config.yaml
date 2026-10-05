@@ -9,7 +9,7 @@ model:
   # Model input size in pixels. MUST match the size the engine was exported with
   # (utils/convert-model-to-engine.py reads this same value).
   imgsz: 1280
-  # Inference device. "cuda:0" is the first NVIDIA GPU; TensorRT engines need a GPU.
+  # Inference device. "cuda:0" is the first NVIDIA GPU; TensorRT engines need a GPU. Set 'cpu' for CPU
   device: cuda:0
 
 detection:

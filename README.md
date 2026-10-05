@@ -40,7 +40,7 @@ pip install -r requirements.txt
 pip install "torch>=2.5.1" "torchvision>=0.20.1" --index-url https://download.pytorch.org/whl/cu121
 ```
 
-### 4. Download the YOLO model
+### 4. Choose the YOLO model (n/s/m/l)
 
 Place `yolo26l.pt` in the `models/` folder:
 
@@ -49,7 +49,9 @@ models/
 └── yolo26l.pt
 ```
 
-### 5. Export to TensorRT engine (to speed up calculations)
+On CPU we could use `.pt` model, but on GPU to speed up it's better to use `.engine` model
+
+### 5. Export (from .pt) to TensorRT engine to speed up calculations
 
 Run once to produce `models/yolo26l.engine` (requires a connected GPU):
 
@@ -64,6 +66,8 @@ Copy `.env-sample` to `.env` and fill in your RTSP URL:
 ```bash
 cp .env-sample .env
 ```
+
+Populate user & password inside RTSP URL
 
 ## Usage
 
@@ -100,13 +104,15 @@ python video-analyzer.py --no-display videos/01.mp4
 
 Analysis stops after `video.max_duration_sec` seconds (default: 3 minutes) or when the file ends.
 
+Your could use video files from tests fixture [folder](tests/fixtures) to check how it works (they used by [video analyzer tests](tests/test_video_analyzer.py))
+
 ## How it works
 
 1. Frames are passed through YOLO tracking (TensorRT engine, FP16).
 2. Detections are filtered by per-class confidence thresholds.
-3. A geometric filter drops low-confidence dog detections whose centre falls inside a person box (common false positive: person wearing a
+3. A geometric filter drops low-confidence dog detections whose center falls inside a person box (common false positive: person wearing a
    hood).
-4. The distance between each person centre and each dog centre, divided by the person's box height, is compared against `pairs.max_distance_ratio`. This keeps the rule the same for near and far pairs.
+4. The distance between each person center and each dog center, divided by the person's box height, is compared against `pairs.max_distance_ratio`. This keeps the rule the same for near and far pairs.
 5. Pairs are tracked by tracker ID: a screenshot is saved when a pair starts and then every `pairs.snapshot_interval_sec` while it persists.
    A pair ends after `pairs.lost_timeout_sec` without being seen.
 
@@ -121,14 +127,15 @@ python stream-analyzer.py --config my.yaml rtsp://user:password@192.168.1.80:554
 
 Main settings:
 
-| Key                                      | Default        | Description                                                             |
-|------------------------------------------|----------------|-------------------------------------------------------------------------|
+| Key                                      | Default        | Description                                                                |
+|------------------------------------------|----------------|----------------------------------------------------------------------------|
 | `pairs.max_distance_ratio`               | `1.0`          | Max centre distance in person heights (scale-invariant) to count as a pair |
-| `detection.conf_person` / `conf_dog`     | `0.2` / `0.02` | Per-class confidence floor (dog is low on purpose, to see distant dogs) |
-| `video.max_duration_sec`                 | `180`          | Video analysis time limit (seconds)                                     |
-| `model.imgsz`                            | `1280`         | Model input size, must match the exported engine                        |
-| `stream.timeout_ms`                      | `5000`         | RTSP connect / read timeout (ms)                                        |
-| `stream.reconnect_min_delay_sec` / `max` | `1` / `30`     | Reconnect back-off range (seconds)                                      |
+| `detection.conf_person` / `conf_dog`     | `0.2` / `0.02` | Per-class confidence floor (dog is low on purpose, to see distant dogs)    |
+| `video.max_duration_sec`                 | `180`          | Video analysis time limit (seconds)                                        |
+| `model.imgsz`                            | `1280`         | Model input size, must match the exported engine                           |
+| `model.device`                           | `cuda:0`       | Inference deivce. CPU (`cpu`) or GPU (`cuda:0`) could be chosen            |
+| `stream.timeout_ms`                      | `5000`         | RTSP connect / read timeout (ms)                                           |
+| `stream.reconnect_min_delay_sec` / `max` | `1` / `30`     | Reconnect back-off range (seconds)                                         |
 
 ## Project structure
 
