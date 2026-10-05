@@ -4,3 +4,6 @@ tensorrt>=11.3.0.99
 
 # Install torch and torchvision separately with the CUDA index (see README):
 # pip install torch>=2.5.1 torchvision>=0.20.1 --index-url https://download.pytorch.org/whl/cu121
+
+# If you need to uninstall previous CPU-based version:
+# pip uninstall torch torchvision torchaudio -y
