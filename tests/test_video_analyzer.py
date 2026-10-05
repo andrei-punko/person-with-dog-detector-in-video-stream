@@ -76,7 +76,7 @@ def test_video_analyzer(tmp_path):
 
     screenshots_dir = tmp_path / "screenshots"
     cfg_file = tmp_path / "override.yaml"
-    cfg_file.write_text(f"screenshots:\n  dir: {screenshots_dir.as_posix()}\n", encoding="utf-8")
+    cfg_file.write_text(f"screenshots:\n  dir: {screenshots_dir.as_posix()}\n  jpeg_quality: 75\n  max_width: 1920\n", encoding="utf-8")
 
     # Night video test
     night_video = os.path.join(os.path.dirname(__file__), "fixtures", "test_video_night.mp4")
