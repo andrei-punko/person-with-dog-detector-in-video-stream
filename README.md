@@ -27,7 +27,7 @@ py -3.12 -m venv venv-gpu
 
 Activate it:
 
-- **Windows:** `venv-gpu\Scripts\activate`
+- **Windows:** `source venv-gpu/Scripts/activate`
 - **Linux / macOS:** `source venv-gpu/bin/activate`
 
 ### 3. Install dependencies
