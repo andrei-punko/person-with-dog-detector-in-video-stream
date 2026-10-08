@@ -91,10 +91,31 @@ def quit_pressed(delay_ms=1):
 
 
 def show_frame(title, frame, cfg):
-    """Show the frame in a window, downscaled to fit the configured size. Returns True if quit was pressed."""
+    """Show the frame in a resizable window with letterboxing (preserving aspect ratio). Returns True if quit was pressed."""
     d = cfg["display"]
     h, w = frame.shape[:2]
-    scale = min(d["max_width"] / w, d["max_height"] / h, 1.0)
-    shown = cv2.resize(frame, (int(w * scale), int(h * scale))) if scale < 1.0 else frame
-    cv2.imshow(title, shown)
+    
+    cv2.namedWindow(title, cv2.WINDOW_NORMAL)
+    
+    # Get current window size if already exists, otherwise use config max dimensions
+    try:
+        _, _, win_w, win_h = cv2.getWindowImageRect(title)
+        if win_w <= 0 or win_h <= 0:
+            win_w, win_h = d["max_width"], d["max_height"]
+    except Exception:
+        win_w, win_h = d["max_width"], d["max_height"]
+
+    scale = min(win_w / w, win_h / h)
+    new_w = int(w * scale)
+    new_h = int(h * scale)
+    
+    resized = cv2.resize(frame, (new_w, new_h))
+    
+    canvas = np.zeros((win_h, win_w, 3), dtype=np.uint8)
+    y_offset = (win_h - new_h) // 2
+    x_offset = (win_w - new_w) // 2
+    
+    canvas[y_offset:y_offset + new_h, x_offset:x_offset + new_w] = resized
+    
+    cv2.imshow(title, canvas)
     return quit_pressed()
