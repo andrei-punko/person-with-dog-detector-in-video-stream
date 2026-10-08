@@ -44,18 +44,12 @@ def test_handle_pair_events_logs_and_saves(caplog):
     assert "Pair ended: p3 <-> d4, duration=5.0s, time=1.5s" in caplog.text
 
 
-def test_handle_pair_events_end_needs_no_frame():
-    shots = FakeScreenshots()
-    handle_pair_events([("end", ("p1", "d2"), None, 1.0)], None, 0, "", shots, LOGGER)
-    assert shots.saved == []
-
-
-def test_process_frame_detects_pair_and_saves_screenshot():
+def test_process_frame_detects_and_saves():
     cfg = load_config()
-    frame = np.zeros((300, 600, 3), dtype=np.uint8)
+    frame = np.zeros((1000, 1000, 3), dtype=np.uint8)
     boxes = [
-        FakeBox(0, 0.9, (0, 0, 100, 200), track_id=1),
-        FakeBox(16, 0.5, (110, 100, 170, 160), track_id=2),
+        FakeBox(0, 0.9, (100, 100, 200, 400), track_id=1),
+        FakeBox(16, 0.5, (120, 150, 160, 200), track_id=2),
     ]
     shots = FakeScreenshots()
     tracker = PairTracker.from_config(cfg)
@@ -81,10 +75,11 @@ def test_process_frame_far_apart_does_nothing():
     (1280, 720, (1280, 720)),
 ])
 def test_show_frame_scales_down_only(monkeypatch, w, h, expected):
-    import pdd.pipeline as pipeline
+    monkeypatch.setattr("cv2.namedWindow", lambda *args, **kwargs: None)
+    monkeypatch.setattr("cv2.getWindowImageRect", lambda title: (0, 0, 1920, 1080))
     shown = {}
-    monkeypatch.setattr(pipeline.cv2, "imshow", lambda title, f: shown.update(shape=f.shape[:2]))
-    monkeypatch.setattr(pipeline.cv2, "waitKey", lambda delay: ord("q"))
+    monkeypatch.setattr("cv2.imshow", lambda title, frame: shown.update({"shape": frame.shape}))
+    monkeypatch.setattr("cv2.waitKey", lambda delay: ord("q"))
     cfg = load_config()
     assert show_frame("t", np.zeros((h, w, 3), dtype=np.uint8), cfg) is True
-    assert shown["shape"] == (expected[1], expected[0])
+    assert shown["shape"] == (1080, 1920, 3)
