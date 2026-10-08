@@ -17,10 +17,10 @@ detection:
   # The dog threshold is deliberately very low so that distant dogs are still detected;
   # the price is more false positives (see dog_inside_person_max_conf below).
   conf_person: 0.2
-  conf_dog: 0.005
+  conf_dog: 0.015
   # False-positive filter: a dog whose centre lies inside a person box AND whose confidence is
   # below this value is dropped. This catches the common mistake of a hood/bag detected as a dog.
-  dog_inside_person_max_conf: 0.02
+  dog_inside_person_max_conf: 0.05
 
 pairs:
   # A person and a dog count as "together" when the distance between their box centres, divided
@@ -39,7 +39,7 @@ screenshots:
   # Directory where event screenshots are saved (created automatically).
   dir: screenshots
   # Hard lower bound between two saved screenshots, in seconds, regardless of events.
-  min_interval_sec: 0.33
+  min_interval_sec: 0.5
   # JPEG quality, 1-100. Lower means smaller files (95 is roughly 4x larger than 65).
   jpeg_quality: 75
   # Frames wider than this are downscaled (aspect ratio kept) before saving. 0 disables scaling.
