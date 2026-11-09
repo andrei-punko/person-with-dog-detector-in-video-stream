@@ -1,16 +1,16 @@
-# Detector of person + dog pair in video stream or file
+# Detector of person+dog pair in video stream or file
 
 [![CI Build and Test](https://github.com/andrei-punko/person-with-dog-detector-in-video-stream/actions/workflows/python-ci-config.yml/badge.svg)](https://github.com/andrei-punko/person-with-dog-detector-in-video-stream/actions/workflows/python-ci-config.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Detects people and dogs in an RTSP stream or a video file using YOLO + TensorRT.  
+Detects people with dogs in an RTSP stream or a video file using YOLO + TensorRT.  
 When a person and a dog are found closer than a configurable pixel threshold, a screenshot is saved to `screenshots/`.
 
 ## Requirements
 
 - Windows or Linux
 - NVIDIA GPU with CUDA (tested with CUDA 12.1 on RTX 3060)
-- Python 3.12
+- Python 3.12+
 - TensorRT (installed as part of `requirements.txt`)
 
 ## Setup
