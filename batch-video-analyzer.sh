@@ -35,7 +35,7 @@ Options:
   --recursive        Scan sub-folders too
   --display          Show the preview window for every file (default: --no-display)
   --config FILE      Passed through to every run as --config FILE
-  --stride N         Analyse every Nth frame (default: video.frame_stride, 3 in config.yaml)
+  --stride N         Analyse every Nth frame (default: video.frame_stride in config.yaml)
   --skip-done        Skip files already processed by a previous batch (markers in $DONE_DIR/)
   --reset-done       Delete those markers first, i.e. analyze everything again
   --retry N          Retry a failed file N times (default: 0)

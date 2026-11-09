@@ -26,7 +26,7 @@ jobs:
         # Устанавливаем фреймворк тестирования и линтер
         pip install pytest flake8
         # opencv-python-headless критичен для CI, так как на серверах GitHub нет графического экрана
-        pip install ultralytics opencv-python-headless numpy
+        pip install ultralytics opencv-python-headless numpy pyyaml
 
     - name: Lint with flake8
       run: |

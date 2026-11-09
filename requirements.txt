@@ -1,6 +1,8 @@
 ultralytics>=8.4.171
 opencv-python>=5.0.0.93
 tensorrt>=11.3.0.99
+# Read config.yaml in pdd/config.py. Listed explicitly: ultralytics 8.4.208 no longer pulls it in.
+pyyaml>=6.0
 
 # Install torch and torchvision separately with the CUDA index (see README):
 # pip install torch>=2.5.1 torchvision>=0.20.1 --index-url https://download.pytorch.org/whl/cu121

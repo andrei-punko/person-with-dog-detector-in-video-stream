@@ -101,7 +101,7 @@ python video-analyzer.py videos/01.mp4
 # Without a video window:
 python video-analyzer.py --no-display videos/01.mp4
 
-# Analyse every 3rd frame (about 3x faster; this is the default from config.yaml):
+# Analyse every 3rd frame (about 3x faster than analysing every frame):
 python video-analyzer.py --no-display --stride 3 videos/01.mp4
 ```
 
@@ -121,7 +121,7 @@ higher values are proportionally faster. Screenshot timestamps stay in video tim
 # Resume: files already analyzed by a previous batch run are skipped
 ./batch-video-analyzer.sh --skip-done        # --reset-done clears that record
 
-# Maximum speed: every 5th frame (the default is video.frame_stride, 3)
+# Maximum speed: every 5th frame (overrides video.frame_stride from config.yaml)
 ./batch-video-analyzer.sh --stride 5
 
 # See what would run, without running anything:
@@ -178,7 +178,7 @@ Main settings:
 | `pairs.max_distance_ratio`               | `1.0`          | Max centre distance in person heights (scale-invariant) to count as a pair |
 | `detection.conf_person` / `conf_dog`     | `0.2` / `0.005` | Per-class confidence floor (dog is low on purpose, to see distant dogs)   |
 | `video.max_duration_sec`                 | `1800`         | Video analysis time limit (seconds)                                       |
-| `video.frame_stride`                     | `3`            | Analyse every Nth video frame; higher is faster, `1` is most accurate      |
+| `video.frame_stride`                     | `1`            | Analyse every Nth video frame; higher is faster, `1` is most accurate      |
 | `model.imgsz`                            | `1280`         | Model input size, must match the exported engine                           |
 | `model.device`                           | `cuda:0`       | Inference deivce. CPU (`cpu`) or GPU (`cuda:0`) could be chosen            |
 | `model.tracker`                          | `bytetrack.yaml` | Tracker config; `botsort.yaml` only for a moving camera                  |
