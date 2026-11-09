@@ -100,15 +100,61 @@ python video-analyzer.py videos/01.mp4
 
 # Without a video window:
 python video-analyzer.py --no-display videos/01.mp4
+
+# Analyse every 3rd frame (about 3x faster; this is the default from config.yaml):
+python video-analyzer.py --no-display --stride 3 videos/01.mp4
 ```
 
 Analysis stops after `video.max_duration_sec` seconds (default: 3 minutes) or when the file ends.
+`video.frame_stride` (or `--stride N`) sets how many frames are skipped: `1` analyses everything,
+higher values are proportionally faster. Screenshot timestamps stay in video time.
+
+### Analyze every video in a folder (batch)
+
+```bash
+# All videos in ./videos, one process per file, headless (no preview window):
+./batch-video-analyzer.sh
+
+# Only *.mp4, including sub-folders, keep the preview window, retry a failed file twice:
+./batch-video-analyzer.sh --pattern '*.mp4' --recursive --display --retry 2
+
+# Resume: files already analyzed by a previous batch run are skipped
+./batch-video-analyzer.sh --skip-done        # --reset-done clears that record
+
+# Maximum speed: every 5th frame (the default is video.frame_stride, 3)
+./batch-video-analyzer.sh --stride 5
+
+# See what would run, without running anything:
+./batch-video-analyzer.sh --list
+./batch-video-analyzer.sh --dry-run
+```
+
+Each file is analyzed by its own `start-video-analyzer.sh` process, so a broken file is reported and
+the batch continues (`--stop-on-error` to stop instead). At the end a summary line prints
+`ok/failed/skipped` and how many screenshots were newly saved; the exit code is `1` if any file failed.
+
+| Option | Meaning |
+|--------|---------|
+| `--videos-dir DIR` | Folder to scan (default: `videos`) |
+| `--pattern GLOB` | File name pattern, e.g. `*.mp4` (default: mp4/mov/mkv/avi/m4v/mpg/mpeg/ts/webm) |
+| `--recursive` | Also scan sub-folders |
+| `--display` | Show the preview window for each file (default is `--no-display`) |
+| `--config FILE` | Passed to every run, same as in the single-file scripts |
+| `--stride N` | Analyse every Nth frame, overriding `video.frame_stride` |
+| `--skip-done` / `--reset-done` | Skip files already processed (`logs/batch-done/` markers) / clear them |
+| `--retry N` | Retry a failing file `N` times |
+| `--stop-on-error` | Abort the batch on the first failure |
+| `--list` / `--dry-run` | Print the file list / the commands, run nothing |
+
+Everything after `--` is passed to `video-analyzer.py` as-is. To use a different option set per run,
+write it into a `--config` override file instead.
 
 Your could use video files from tests fixture [folder](tests/fixtures) to check how it works (they used by [video analyzer tests](tests/test_video_analyzer.py))
 
 ## How it works
 
-1. Frames are passed through YOLO tracking (TensorRT engine, FP16).
+1. Frames are passed through YOLO tracking (TensorRT engine, FP16). Only every
+   `video.frame_stride`-th frame is analysed, so skipped frames are never run through the model.
 2. Detections are filtered by per-class confidence thresholds.
 3. A geometric filter drops low-confidence dog detections whose center falls inside a person box (common false positive: person wearing a
    hood).
@@ -130,12 +176,29 @@ Main settings:
 | Key                                      | Default        | Description                                                                |
 |------------------------------------------|----------------|----------------------------------------------------------------------------|
 | `pairs.max_distance_ratio`               | `1.0`          | Max centre distance in person heights (scale-invariant) to count as a pair |
-| `detection.conf_person` / `conf_dog`     | `0.2` / `0.02` | Per-class confidence floor (dog is low on purpose, to see distant dogs)    |
-| `video.max_duration_sec`                 | `180`          | Video analysis time limit (seconds)                                        |
+| `detection.conf_person` / `conf_dog`     | `0.2` / `0.005` | Per-class confidence floor (dog is low on purpose, to see distant dogs)   |
+| `video.max_duration_sec`                 | `1800`         | Video analysis time limit (seconds)                                       |
+| `video.frame_stride`                     | `3`            | Analyse every Nth video frame; higher is faster, `1` is most accurate      |
 | `model.imgsz`                            | `1280`         | Model input size, must match the exported engine                           |
 | `model.device`                           | `cuda:0`       | Inference deivce. CPU (`cpu`) or GPU (`cuda:0`) could be chosen            |
+| `model.tracker`                          | `bytetrack.yaml` | Tracker config; `botsort.yaml` only for a moving camera                  |
 | `stream.timeout_ms`                      | `5000`         | RTSP connect / read timeout (ms)                                           |
 | `stream.reconnect_min_delay_sec` / `max` | `1` / `30`     | Reconnect back-off range (seconds)                                         |
+
+### Batch processing speed
+
+Most of the time goes into the model, so the number of inferences per second of video decides the
+batch duration. Two settings do most of the work:
+
+| Change | Effect on a 1440p 15 fps recording (RTX 3060, `yolo26l` @ 1280) |
+|--------|-----------------------------------------------------------------|
+| `model.tracker: bytetrack.yaml` instead of BoT-SORT | 23.5 → 40.6 analysed fps (~1.7x) |
+| `video.frame_stride: 3` on top of that | 40.6 → 117.8 video fps (~5x overall) |
+
+The tracker gain comes from skipping BoT-SORT's per-frame camera-motion estimation, which is
+pointless for a fixed camera. The stride gain comes from running the model on every third frame.
+Running several files in parallel does **not** help: the GPU is already saturated (2 processes
+gave only ~12% more total throughput while competing for the same GPU).
 
 ## Project structure
 
@@ -162,6 +225,7 @@ person-dog-detector/
 ├── video-analyzer.py           # Video file analyser
 ├── start-stream-analyzer.sh    # Launcher (reads .env), Windows Git Bash / Linux / macOS
 ├── start-video-analyzer.sh     # Video file launcher
+├── batch-video-analyzer.sh     # Runs the video launcher over a whole folder of videos
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── .env-sample

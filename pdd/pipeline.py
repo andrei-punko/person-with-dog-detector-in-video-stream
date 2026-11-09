@@ -15,15 +15,19 @@ from pdd.logs import setup_logging
 QUIT_KEY = ord('q')
 
 
-def setup(description, source_help, log_file):
+def setup(description, source_help, log_file, add_stride=False):
     """Parse command-line arguments, load the config and configure logging.
 
     Returns (args, cfg, logger). args.source is the stream URL or video file path.
+    add_stride adds the --stride option (video files only; the stream reads live frames).
     """
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument("source", help=source_help)
     parser.add_argument("--no-display", action="store_true", help="Disable the video window (for headless servers)")
     parser.add_argument("--config", help="YAML file overriding values from config.yaml")
+    if add_stride:
+        parser.add_argument("--stride", type=int, default=None,
+                            help="Analyse every Nth video frame (default: video.frame_stride)")
     args = parser.parse_args()
 
     cfg = load_config(args.config)
@@ -38,7 +42,10 @@ def load_model(cfg, logger):
 
     model = YOLO(cfg["model"]["path"])
     logger.info("Warming up TensorRT model...")
-    model.track(source=np.zeros((640, 640, 3), dtype=np.uint8), device=cfg["model"]["device"], verbose=False)
+    # Pass the tracker here too: with persist=True the warm-up creates the tracker that later
+    # calls reuse, so leaving it out would silently ignore model.tracker.
+    model.track(source=np.zeros((640, 640, 3), dtype=np.uint8), device=cfg["model"]["device"],
+                tracker=cfg["model"]["tracker"], verbose=False)
     return model
 
 
@@ -51,6 +58,7 @@ def track_kwargs(cfg):
         "conf": min(class_thresholds(cfg).values()),
         "imgsz": cfg["model"]["imgsz"],
         "device": cfg["model"]["device"],
+        "tracker": cfg["model"]["tracker"],
         "verbose": False,
         # Keep tracker state between frames so IDs stay stable
         "persist": True,

@@ -11,6 +11,12 @@ def test_default_dog_threshold_stays_low():
     assert load_config()["detection"]["conf_dog"] <= 0.02
 
 
+def test_default_video_stride_is_positive():
+    cfg = load_config()
+    assert cfg["video"]["frame_stride"] >= 1
+    assert cfg["model"]["tracker"].endswith(".yaml")
+
+
 def test_override_replaces_only_given_keys(tmp_path):
     override = tmp_path / "my.yaml"
     override.write_text("pairs:\n  distance_threshold: 250\n", encoding="utf-8")

@@ -31,6 +31,7 @@ def test_track_kwargs_uses_lowest_threshold_and_config():
     assert kw["conf"] == min(cfg["detection"]["conf_person"], cfg["detection"]["conf_dog"])
     assert kw["imgsz"] == cfg["model"]["imgsz"]
     assert kw["classes"] == [0, 16]
+    assert kw["tracker"] == cfg["model"]["tracker"]
     assert kw["persist"] is True
 
 
